@@ -16,13 +16,35 @@ final class DailyLog {
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSession.dailyLog)
     var workout: WorkoutSession?
     
-    init(date: Date = Date(), sleepDuration: Double = 0, notes: String = "", meals: [Meal] = [], supplements: [Supplement] = [], workout: WorkoutSession? = nil) {
+    @Relationship(deleteRule: .cascade, inverse: \FaceLog.dailyLog)
+    var faceLogs: [FaceLog]
+    
+    init(date: Date = Date(), sleepDuration: Double = 0, notes: String = "", meals: [Meal] = [], supplements: [Supplement] = [], workout: WorkoutSession? = nil, faceLogs: [FaceLog] = []) {
         self.date = date
         self.sleepDuration = sleepDuration
         self.notes = notes
         self.meals = meals
         self.supplements = supplements
         self.workout = workout
+        self.faceLogs = faceLogs
+    }
+}
+
+@Model
+final class FaceLog {
+    var timestamp: Date
+    var imagePath: String? // Store filename in documents directory
+    var faceWidth: Double? // Metric from ARKit
+    var cheekVolume: Double? // Calculated metric
+    var isMorning: Bool
+    var dailyLog: DailyLog?
+    
+    init(timestamp: Date = Date(), imagePath: String? = nil, faceWidth: Double? = 0, cheekVolume: Double? = 0, isMorning: Bool = true) {
+        self.timestamp = timestamp
+        self.imagePath = imagePath
+        self.faceWidth = faceWidth
+        self.cheekVolume = cheekVolume
+        self.isMorning = isMorning
     }
 }
 

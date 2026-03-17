@@ -148,9 +148,23 @@ struct ExerciseCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text("\(exercise.orderIndex ?? 0). \(exercise.name)")
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                Button(action: {
+                    UIPasteboard.general.string = exercise.name
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                }) {
+                    HStack(spacing: 6) {
+                        Text("\(exercise.orderIndex ?? 0). \(exercise.name)")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                        
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption2)
+                            .foregroundStyle(.purple.opacity(0.7))
+                    }
+                }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 

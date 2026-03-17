@@ -5,7 +5,7 @@ import SwiftData
 struct WorkoutApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
         .modelContainer(for: [
             DailyLog.self,
@@ -13,7 +13,8 @@ struct WorkoutApp: App {
             Supplement.self,
             WorkoutSession.self,
             Exercise.self,
-            WorkoutSet.self
+            WorkoutSet.self,
+            FaceLog.self
         ])
     }
 }
