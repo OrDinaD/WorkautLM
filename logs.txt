@@ -1,0 +1,6 @@
+09:57:38  Acquired tunnel connection to device.
+09:57:38  Enabling developer disk image services.
+09:57:39  Acquired usage assertion.
+Launched application with OrDinaD.Workout bundle identifier.
+Waiting for the application to terminate…
+App terminated due to signal 15.

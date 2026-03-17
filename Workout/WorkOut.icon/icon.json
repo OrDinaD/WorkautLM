@@ -1,0 +1,47 @@
+{
+  "fill" : {
+    "automatic-gradient" : "display-p3:1.00000,0.89239,0.98606,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "Gemini_Generated_Image_l0jf8l0jf8l0jf8l__фон_удален_-removebg-preview.png",
+          "name" : "Gemini_Generated_Image_l0jf8l0jf8l0jf8l__фон_удален_-removebg-preview",
+          "position" : {
+            "scale" : 1.87,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : true,
+          "image-name" : "Gemini_Generated_Image_l0jf8l0jf8l0jf8l (фон удален).png",
+          "name" : "Gemini_Generated_Image_l0jf8l0jf8l0jf8l (фон удален)",
+          "position" : {
+            "scale" : 0.45,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "iOS"
+    ]
+  }
+}
