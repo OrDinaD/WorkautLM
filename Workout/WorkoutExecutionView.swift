@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import ActivityKit
 
 struct ExportData: Identifiable {
     let id = UUID()
@@ -11,9 +12,10 @@ struct WorkoutExecutionView: View {
     @Bindable var session: WorkoutSession
     
     @State private var exportData: ExportData?
+    @State private var currentActivity: Activity<WorkoutAttributes>?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             Color.black.ignoresSafeArea()
             
             VStack {
@@ -44,16 +46,39 @@ struct WorkoutExecutionView: View {
                         }
 
                         ForEach(session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })) { exercise in
-                            ExerciseCardView(exercise: exercise)
+                            ExerciseCardView(exercise: exercise, onUpdate: updateActivity)
                                 .listRowBackground(Color.black)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
+                        
+                        // Отступ снизу для кнопки
+                        Color.clear.frame(height: 80).listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .background(Color.black)
                 }
+            }
+            
+            // Floating Action Button для режима тренировки
+            if !session.exercises.isEmpty {
+                Button(action: toggleLiveActivity) {
+                    HStack {
+                        Image(systemName: currentActivity == nil ? "play.fill" : "stop.fill")
+                        Text(currentActivity == nil ? "Начать режим тренировки" : "Завершить режим")
+                            .fontWeight(.bold)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 15)
+                    .background(currentActivity == nil ? Color.green : Color.red)
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .shadow(color: (currentActivity == nil ? Color.green : Color.red).opacity(0.3), radius: 10, x: 0, y: 5)
+                }
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
+                .transition(.scale.combined(with: .opacity))
             }
         }
         .navigationTitle("Тренировка")
@@ -73,6 +98,100 @@ struct WorkoutExecutionView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(Color.black, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .environment(\.locale, Locale(identifier: "ru_RU"))
+        .onAppear {
+            // Синхронизируем состояние активности при входе на экран
+            currentActivity = Activity<WorkoutAttributes>.activities.first
+        }
+    }
+
+    // MARK: - Live Activity Logic
+    
+    private func toggleLiveActivity() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        if let activity = currentActivity {
+            let state = activity.content.state
+            Task {
+                await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
+                currentActivity = nil
+            }
+        } else {
+            startActivity()
+        }
+    }
+    
+    private func startActivity() {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            print("Live Activities are disabled")
+            return
+        }
+        
+        let sortedExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
+        
+        // Ищем текущее упражнение (где есть незаконченные подходы)
+        let activeExercise = sortedExercises.first(where: { exercise in
+            exercise.sets.contains { !$0.isCompleted }
+        }) ?? sortedExercises.first
+        
+        guard let exercise = activeExercise else { return }
+        
+        let sortedSets = exercise.sets.sorted(by: { $0.setNumber < $1.setNumber })
+        let currentSet = sortedSets.first(where: { !$0.isCompleted }) ?? sortedSets.first!
+        
+        let attributes = WorkoutAttributes(workoutName: "Тренировка")
+        
+        let weightVal = currentSet.actualWeight ?? exercise.plannedWeight
+        let weightStr = weightVal == 0 ? "-" : (weightVal.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", weightVal) : String(format: "%.1f", weightVal))
+        
+        let initialState = WorkoutAttributes.ContentState(
+            exerciseName: exercise.name,
+            currentSetNumber: currentSet.setNumber,
+            totalSets: exercise.sets.count,
+            weight: weightStr,
+            reps: exercise.plannedRepsString ?? "\(currentSet.actualReps ?? currentSet.plannedReps)",
+            isCompleted: false
+        )
+        
+        do {
+            currentActivity = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(state: initialState, staleDate: nil)
+            )
+            print("Activity started: \(currentActivity?.id ?? "unknown")")
+        } catch {
+            print("Error starting Live Activity: \(error.localizedDescription)")
+        }
+    }
+    
+    private func updateActivity() {
+        guard let activity = currentActivity else { return }
+        
+        let sortedExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
+        
+        guard let activeExercise = sortedExercises.first(where: { exercise in
+            exercise.sets.contains { !$0.isCompleted }
+        }) ?? sortedExercises.last else { return }
+        
+        let sortedSets = activeExercise.sets.sorted(by: { $0.setNumber < $1.setNumber })
+        let currentSet = sortedSets.first(where: { !$0.isCompleted }) ?? sortedSets.last!
+        
+        let weightVal = currentSet.actualWeight ?? activeExercise.plannedWeight
+        let weightStr = weightVal == 0 ? "-" : (weightVal.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", weightVal) : String(format: "%.1f", weightVal))
+        
+        let updatedState = WorkoutAttributes.ContentState(
+            exerciseName: activeExercise.name,
+            currentSetNumber: currentSet.setNumber,
+            totalSets: activeExercise.sets.count,
+            weight: weightStr,
+            reps: activeExercise.plannedRepsString ?? "\(currentSet.actualReps ?? currentSet.plannedReps)",
+            isCompleted: false
+        )
+        
+        Task {
+            await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+        }
     }
 
     private func prepareExport() {
@@ -96,9 +215,7 @@ struct WorkoutExecutionView: View {
                 let reps = set.actualReps ?? set.plannedReps
                 let status = set.isCompleted ? "" : "(Не выполнено) "
                 
-                // Only include notes on the first set row to avoid duplication
                 let notes = index == 0 ? exercise.notes.replacingOccurrences(of: "\n", with: " ") : ""
-                
                 markdown += "| \(exercise.name) | \(set.setNumber) | \(weight) кг | \(status)\(reps) | \(notes) |\n"
             }
         }
@@ -106,6 +223,8 @@ struct WorkoutExecutionView: View {
         exportData = ExportData(text: markdown)
     }
 }
+
+// MARK: - Subviews
 
 struct MarkdownExportView: View {
     let text: String
@@ -143,6 +262,7 @@ struct MarkdownExportView: View {
 struct ExerciseCardView: View {
     @Bindable var exercise: Exercise
     @State private var isRecommendationsExpanded: Bool = false
+    var onUpdate: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -253,7 +373,7 @@ struct ExerciseCardView: View {
             
             // Sets List
             ForEach(exercise.sets.sorted(by: { $0.setNumber < $1.setNumber })) { set in
-                SetRowView(set: set)
+                SetRowView(set: set, onUpdate: onUpdate)
             }
         }
         .padding()
@@ -268,18 +388,15 @@ struct ExerciseCardView: View {
 
 struct SetRowView: View {
     @Bindable var set: WorkoutSet
+    var onUpdate: () -> Void
     
-    // Available weights: 1-10 with step 1, then 12.5, 13, 15, 17.5, 20... up to 150
+    // Available weights
     let weights: [Double] = {
         var values: [Double] = []
         for i in 1...10 { values.append(Double(i)) }
-        values.append(12.5)
-        values.append(13.0)
+        values.append(12.5); values.append(13.0)
         var current = 15.0
-        while current <= 150.0 {
-            values.append(current)
-            current += 2.5
-        }
+        while current <= 150.0 { values.append(current); current += 2.5 }
         return values
     }()
     
@@ -298,21 +415,17 @@ struct SetRowView: View {
             Menu {
                 Picker("Вес", selection: Binding(
                     get: { set.actualWeight ?? set.exercise?.plannedWeight ?? 0 },
-                    set: { set.actualWeight = $0 }
+                    set: { set.actualWeight = $0; onUpdate() }
                 )) {
                     ForEach(weights, id: \.self) { weight in
-                        Text("\(weight, specifier: weight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f") кг")
-                            .tag(weight)
+                        Text("\(weight, specifier: weight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f") кг").tag(weight)
                     }
                 }
             } label: {
                 Text("\(set.actualWeight ?? set.exercise?.plannedWeight ?? 0, specifier: (set.actualWeight ?? set.exercise?.plannedWeight ?? 0).truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f")")
-                    .font(.system(.subheadline, design: .monospaced))
-                    .bold()
-                    .frame(width: 70)
-                    .padding(6)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(8)
+                    .font(.system(.subheadline, design: .monospaced)).bold()
+                    .frame(width: 70).padding(6)
+                    .background(Color.white.opacity(0.05)).cornerRadius(8)
                     .foregroundStyle(.white)
             }
             
@@ -320,21 +433,17 @@ struct SetRowView: View {
             Menu {
                 Picker("Повт", selection: Binding(
                     get: { set.actualReps ?? set.plannedReps },
-                    set: { set.actualReps = $0 }
+                    set: { set.actualReps = $0; onUpdate() }
                 )) {
                     ForEach(repsRange, id: \.self) { rep in
-                        Text("\(rep)")
-                            .tag(rep)
+                        Text("\(rep)").tag(rep)
                     }
                 }
             } label: {
                 Text("\(set.actualReps ?? set.plannedReps)")
-                    .font(.system(.subheadline, design: .monospaced))
-                    .bold()
-                    .frame(width: 60)
-                    .padding(6)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(8)
+                    .font(.system(.subheadline, design: .monospaced)).bold()
+                    .frame(width: 60).padding(6)
+                    .background(Color.white.opacity(0.05)).cornerRadius(8)
                     .foregroundStyle(.white)
             }
             
@@ -346,11 +455,9 @@ struct SetRowView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(set.isCompleted ? Color.purple : Color.white.opacity(0.1))
                         .frame(width: 32, height: 32)
-                    
                     if set.isCompleted {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
                     }
                 }
             }
@@ -364,20 +471,13 @@ struct SetRowView: View {
             set.isCompleted.toggle()
             if set.isCompleted {
                 set.completionTime = Date()
-                // Auto-fill actual values if they are empty
-                if set.actualWeight == nil || set.actualWeight == 0 {
-                    set.actualWeight = set.exercise?.plannedWeight
-                }
-                if set.actualReps == nil || set.actualReps == 0 {
-                    set.actualReps = set.plannedReps
-                }
-                
-                // Haptic feedback
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
+                if set.actualWeight == nil || set.actualWeight == 0 { set.actualWeight = set.exercise?.plannedWeight }
+                if set.actualReps == nil || set.actualReps == 0 { set.actualReps = set.plannedReps }
+                let generator = UIImpactFeedbackGenerator(style: .medium); generator.impactOccurred()
             } else {
                 set.completionTime = nil
             }
+            onUpdate() // Обновляем Live Activity
         }
     }
 }

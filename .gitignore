@@ -1,0 +1,38 @@
+# Xcode
+#
+# gitignore contributors: scroll down to GitHub and 
+# libraries section for commonly used library managers
+
+## Build results
+build/
+DerivedData/
+
+## Project settings
+xcuserdata/
+
+## Schemes
+## Build history
+*.xcbkptlist
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+## Crash logs
+*.crash
+
+## iOS Simulator
+*.session
+
+## OS X
+.DS_Store
+
+## Swift Package Manager
+.build/
+.swiftpm/
+
+## Log files
+logs.txt
+sim_logs.txt
+*.log
+
+## App Specific
+Workout/build/
+Workout/build_sim/

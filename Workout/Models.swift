@@ -16,35 +16,13 @@ final class DailyLog {
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSession.dailyLog)
     var workout: WorkoutSession?
     
-    @Relationship(deleteRule: .cascade, inverse: \FaceLog.dailyLog)
-    var faceLogs: [FaceLog]
-    
-    init(date: Date = Date(), sleepDuration: Double = 0, notes: String = "", meals: [Meal] = [], supplements: [Supplement] = [], workout: WorkoutSession? = nil, faceLogs: [FaceLog] = []) {
+    init(date: Date = Date(), sleepDuration: Double = 0, notes: String = "", meals: [Meal] = [], supplements: [Supplement] = [], workout: WorkoutSession? = nil) {
         self.date = date
         self.sleepDuration = sleepDuration
         self.notes = notes
         self.meals = meals
         self.supplements = supplements
         self.workout = workout
-        self.faceLogs = faceLogs
-    }
-}
-
-@Model
-final class FaceLog {
-    var timestamp: Date
-    var imagePath: String? // Store filename in documents directory
-    var faceWidth: Double? // Metric from ARKit
-    var cheekVolume: Double? // Calculated metric
-    var isMorning: Bool
-    var dailyLog: DailyLog?
-    
-    init(timestamp: Date = Date(), imagePath: String? = nil, faceWidth: Double? = 0, cheekVolume: Double? = 0, isMorning: Bool = true) {
-        self.timestamp = timestamp
-        self.imagePath = imagePath
-        self.faceWidth = faceWidth
-        self.cheekVolume = cheekVolume
-        self.isMorning = isMorning
     }
 }
 
@@ -54,21 +32,27 @@ final class Meal {
     var foodDescription: String
     var dailyLog: DailyLog?
     
-    init(time: Date = Date(), foodDescription: String = "") {
+    init(time: Date = Date(), foodDescription: String = "", dailyLog: DailyLog? = nil) {
         self.time = time
         self.foodDescription = foodDescription
+        self.dailyLog = dailyLog
     }
 }
 
 @Model
 final class Supplement {
     var name: String
+    var dosage: String
+    var time: Date
     var isTaken: Bool
     var dailyLog: DailyLog?
     
-    init(name: String = "", isTaken: Bool = false) {
+    init(name: String = "", dosage: String = "", time: Date = Date(), isTaken: Bool = false, dailyLog: DailyLog? = nil) {
         self.name = name
+        self.dosage = dosage
+        self.time = time
         self.isTaken = isTaken
+        self.dailyLog = dailyLog
     }
 }
 
@@ -123,7 +107,7 @@ final class WorkoutSet {
     var completionTime: Date?
     var exercise: Exercise?
     
-    init(setNumber: Int, plannedReps: Int, actualReps: Int? = nil, actualWeight: Double? = nil, isCompleted: Bool = false, completionTime: Date? = nil) {
+    init(setNumber: Int = 1, plannedReps: Int = 10, actualReps: Int? = nil, actualWeight: Double? = nil, isCompleted: Bool = false, completionTime: Date? = nil) {
         self.setNumber = setNumber
         self.plannedReps = plannedReps
         self.actualReps = actualReps

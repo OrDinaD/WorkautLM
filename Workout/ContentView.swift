@@ -1,9 +1,11 @@
 import SwiftUI
 import SwiftData
+import ActivityKit
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \DailyLog.date, order: .reverse) private var logs: [DailyLog]
+    @Query private var sessions: [WorkoutSession]
     
     @State private var showingParser = false
     @State private var selectedLogForDescription: DailyLog?
@@ -16,22 +18,21 @@ struct ContentView: View {
                 VStack {
                     if logs.isEmpty {
                         ContentUnavailableView {
-                            Label("No Logs", systemImage: "calendar.badge.plus")
+                            Label("Нет записей", systemImage: "calendar.badge.plus")
                                 .foregroundStyle(.purple)
                         } description: {
-                            Text("Your workout and nutrition logs will appear here.")
+                            Text("Ваши тренировки появятся здесь.")
                                 .foregroundStyle(.gray)
                         }
                     } else {
                         List {
                             ForEach(logs) { log in
                                 ZStack {
-                                    // Hidden NavigationLink to remove the default grey arrow
                                     NavigationLink {
                                         if let workout = log.workout {
                                             WorkoutExecutionView(session: workout)
                                         } else {
-                                            Text("Log for \(log.date.formatted())")
+                                            Text("Запись от \(log.date.formatted())")
                                                 .foregroundStyle(.white)
                                         }
                                     } label: {
@@ -133,19 +134,81 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .tint(.purple)
+        .environment(\.locale, Locale(identifier: "ru_RU"))
+        .onOpenURL { url in
+            if url.host == "complete-set" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    completeCurrentSetFromDeepLink()
+                }
+            }
+        }
     }
 
     private func addLog() {
         withAnimation {
-            let newLog = DailyLog(date: Date(), notes: "New training day")
+            let newLog = DailyLog(date: Date(), notes: "Новый тренировочный день")
             modelContext.insert(newLog)
         }
     }
-}
-
-#Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: DailyLog.self, configurations: config)
-    return ContentView()
-        .modelContainer(container)
+    
+    private func completeCurrentSetFromDeepLink() {
+        guard let session = sessions.last(where: { session in
+            session.exercises.contains { $0.sets.contains { !$0.isCompleted } }
+        }) ?? sessions.last else { return }
+        
+        let sortedExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
+        guard let activeExercise = sortedExercises.first(where: { exercise in
+            exercise.sets.contains { !$0.isCompleted }
+        }) else { return }
+        
+        let sortedSets = activeExercise.sets.sorted(by: { $0.setNumber < $1.setNumber })
+        guard let currentSet = sortedSets.first(where: { !$0.isCompleted }) else { return }
+        
+        withAnimation {
+            currentSet.isCompleted = true
+            currentSet.completionTime = Date()
+            if currentSet.actualWeight == nil || currentSet.actualWeight == 0 {
+                currentSet.actualWeight = activeExercise.plannedWeight
+            }
+            if currentSet.actualReps == nil || currentSet.actualReps == 0 {
+                currentSet.actualReps = currentSet.plannedReps
+            }
+            try? modelContext.save()
+            updateLiveActivityAfterCompletion(session: session)
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        }
+    }
+    
+    private func updateLiveActivityAfterCompletion(session: WorkoutSession) {
+        guard let activity = Activity<WorkoutAttributes>.activities.first else { return }
+        let sortedExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
+        let activeExercise = sortedExercises.first(where: { exercise in
+            exercise.sets.contains { !$0.isCompleted }
+        }) ?? sortedExercises.last!
+        
+        let sortedSets = activeExercise.sets.sorted(by: { $0.setNumber < $1.setNumber })
+        let nextSet = sortedSets.first(where: { !$0.isCompleted }) ?? sortedSets.last!
+        
+        let weightVal = nextSet.actualWeight ?? activeExercise.plannedWeight
+        let weightStr = weightVal == 0 ? "-" : (weightVal.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", weightVal) : String(format: "%.1f", weightVal))
+        let isAllDone = !session.exercises.contains { $0.sets.contains { !$0.isCompleted } }
+        
+        let updatedState = WorkoutAttributes.ContentState(
+            exerciseName: activeExercise.name,
+            currentSetNumber: nextSet.setNumber,
+            totalSets: activeExercise.sets.count,
+            weight: weightStr,
+            reps: activeExercise.plannedRepsString ?? "\(nextSet.actualReps ?? nextSet.plannedReps)",
+            isCompleted: isAllDone
+        )
+        
+        Task {
+            await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+            if isAllDone {
+                try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+                await activity.end(ActivityContent(state: updatedState, staleDate: nil), dismissalPolicy: .immediate)
+            }
+        }
+    }
 }
