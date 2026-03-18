@@ -438,6 +438,7 @@
 				DEVELOPMENT_TEAM = Y85TSUMM4F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -472,6 +473,7 @@
 				DEVELOPMENT_TEAM = Y85TSUMM4F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
