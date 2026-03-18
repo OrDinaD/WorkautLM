@@ -6,9 +6,25 @@
 ## Build results
 build/
 DerivedData/
+build_sim/
+*.[oa]
+*.o
+*.a
+*.dylib
+*.swiftmodule
+*.swiftdoc
+*.abi.json
+*.swiftsourceinfo
 
 ## Project settings
 xcuserdata/
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+*.xcuserstate
 
 ## Schemes
 ## Build history
@@ -20,6 +36,7 @@ xcuserdata/
 
 ## iOS Simulator
 *.session
+*.mobileprovision
 
 ## OS X
 .DS_Store
@@ -36,3 +53,5 @@ sim_logs.txt
 ## App Specific
 Workout/build/
 Workout/build_sim/
+Workout/logs.txt
+Workout/sim_logs.txt

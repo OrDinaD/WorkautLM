@@ -58,6 +58,7 @@ struct WorkoutExecutionView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .background(Color.black)
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }
             

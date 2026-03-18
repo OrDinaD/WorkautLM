@@ -39,6 +39,7 @@ struct SmartPlanParserView: View {
                                         .stroke(Color.purple.opacity(0.3), lineWidth: 1)
                                 )
                                 .padding(.horizontal)
+                                .scrollDismissesKeyboard(.interactively)
                             
                             Button(action: parseText) {
                                 Text("Разобрать план")
@@ -127,6 +128,7 @@ struct SmartPlanParserView: View {
             .listStyle(.grouped)
             .scrollContentBackground(.hidden)
             .background(Color.black)
+            .scrollDismissesKeyboard(.interactively)
             
             Button(action: savePlan) {
                 Text("Сохранить в лог")
