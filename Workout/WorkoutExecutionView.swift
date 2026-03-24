@@ -13,6 +13,8 @@ struct WorkoutExecutionView: View {
     
     @State private var exportData: ExportData?
     @State private var currentActivity: Activity<WorkoutAttributes>?
+    @State private var showingPreWorkoutMetrics = false
+    @State private var showingPostWorkoutMetrics = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -95,6 +97,12 @@ struct WorkoutExecutionView: View {
         .sheet(item: $exportData) { data in
             MarkdownExportView(text: data.text)
         }
+        .sheet(isPresented: $showingPreWorkoutMetrics) {
+            PreWorkoutMetricsView(session: session)
+        }
+        .sheet(isPresented: $showingPostWorkoutMetrics) {
+            PostWorkoutMetricsView(session: session)
+        }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(Color.black, for: .navigationBar)
@@ -117,8 +125,10 @@ struct WorkoutExecutionView: View {
             Task {
                 await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
                 currentActivity = nil
+                showingPostWorkoutMetrics = true // Show post-workout metrics when finishing activity
             }
         } else {
+            showingPreWorkoutMetrics = true // Show pre-workout metrics before starting activity
             startActivity()
         }
     }
@@ -205,23 +215,149 @@ struct WorkoutExecutionView: View {
         let dateStr = formatter.string(from: date)
         let timeStr = timeFormatter.string(from: date)
         
-        var markdown = "Тренировка: \(dateStr) (Начало: \(timeStr))\n\n"
-        markdown += "| Упражнение | Подход | Вес | Повт | Заметки |\n"
-        markdown += "|---|---|---|---|---|\n"
+        var markdown = "Тренировка: \(dateStr) (Начало: \(timeStr))\n"
+        markdown += "Сон: \(String(format: "%.1f", session.sleepHours)) ч, Стресс: \(session.stressLevel == 0 ? "Низкий" : (session.stressLevel == 1 ? "Средний" : "Высокий"))\n\n"
+        
+        markdown += "| Упражнение | Подход | Вес | Повт | RPE | Заметки |\n"
+        markdown += "|---|---|---|---|---|---|\n"
         
         for exercise in session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) }) {
             let sortedSets = exercise.sets.sorted(by: { $0.setNumber < $1.setNumber })
             for (index, set) in sortedSets.enumerated() {
                 let weight = set.actualWeight ?? exercise.plannedWeight
                 let reps = set.actualReps ?? set.plannedReps
+                let rpe = set.rpe != nil ? "\(set.rpe!)" : "-"
                 let status = set.isCompleted ? "" : "(Не выполнено) "
                 
                 let notes = index == 0 ? exercise.notes.replacingOccurrences(of: "\n", with: " ") : ""
-                markdown += "| \(exercise.name) | \(set.setNumber) | \(weight) кг | \(status)\(reps) | \(notes) |\n"
+                markdown += "| \(exercise.name) | \(set.setNumber) | \(weight) кг | \(status)\(reps) | \(rpe) | \(notes) |\n"
             }
         }
         
+        if let pump = session.pump {
+            markdown += "\nОценка после:\n- Памп: \(pump)\n"
+            markdown += "- Напряжение: \(session.tension ?? 0)\n"
+            markdown += "- Крепатура: \(session.soreness ?? 0)\n"
+        }
+        
         exportData = ExportData(text: markdown)
+    }
+}
+
+// MARK: - Metrics Views
+
+struct PreWorkoutMetricsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var session: WorkoutSession
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VStack(spacing: 30) {
+                    VStack(alignment: .leading) {
+                        Text("Качество сна (часы)")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Stepper("\(session.sleepHours, specifier: "%.1f") ч", value: $session.sleepHours, in: 4...12, step: 0.5)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
+                            .foregroundStyle(.white)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        Text("Уровень стресса")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Picker("Стресс", selection: $session.stressLevel) {
+                            Text("Низкий").tag(0)
+                            Text("Средний").tag(1)
+                            Text("Высокий").tag(2)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    
+                    Spacer()
+                    
+                    Button("Начать тренировку") {
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .controlSize(.large)
+                }
+                .padding(20)
+            }
+            .navigationTitle("Пре-воркаут метрики")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct PostWorkoutMetricsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var session: WorkoutSession
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 25) {
+                        MetricSelector(title: "Памп", description: "Наполненность мышц", value: Binding(get: { session.pump ?? 1 }, set: { session.pump = $0 }))
+                        MetricSelector(title: "Напряжение", description: "Чувство целевых мышц", value: Binding(get: { session.tension ?? 1 }, set: { session.tension = $0 }))
+                        MetricSelector(title: "Крепатура", description: "Утомление и боль", value: Binding(get: { session.soreness ?? 1 }, set: { session.soreness = $0 }))
+                        
+                        Spacer()
+                        
+                        Button("Завершить") {
+                            dismiss()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.purple)
+                        .controlSize(.large)
+                        .padding(.top, 20)
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle("Итоги тренировки (MEV)")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct MetricSelector: View {
+    let title: String
+    let description: String
+    @Binding var value: Int
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(.gray)
+            
+            Picker(title, selection: $value) {
+                Text("0 - Нет").tag(0)
+                Text("1 - Норма").tag(1)
+                Text("2 - Предел").tag(2)
+            }
+            .pickerStyle(.segmented)
+            .padding(.top, 5)
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
     }
 }
 
@@ -362,9 +498,10 @@ struct ExerciseCardView: View {
             
             // Sets Table Header
             HStack {
-                Text("ПОДХОД").frame(width: 50, alignment: .leading)
-                Text("ВЕС").frame(width: 80, alignment: .center)
-                Text("ПОВТ").frame(width: 80, alignment: .center)
+                Text("ПОДХОД").frame(width: 30, alignment: .leading)
+                Text("ВЕС").frame(width: 60, alignment: .center)
+                Text("ПОВТ").frame(width: 50, alignment: .center)
+                Text("RPE").frame(width: 50, alignment: .center)
                 Spacer()
                 Text("ГОТОВО")
             }
@@ -402,6 +539,7 @@ struct SetRowView: View {
     }()
     
     let repsRange = Array(1...50)
+    let rpeRange = Array(5...10)
     
     var body: some View {
         HStack {
@@ -409,14 +547,18 @@ struct SetRowView: View {
             Text("\(set.setNumber)")
                 .font(.subheadline)
                 .bold()
-                .frame(width: 30, alignment: .leading)
+                .frame(width: 25, alignment: .leading)
                 .foregroundStyle(set.isCompleted ? .purple : .gray)
             
             // Weight Picker
             Menu {
                 Picker("Вес", selection: Binding(
                     get: { set.actualWeight ?? set.exercise?.plannedWeight ?? 0 },
-                    set: { set.actualWeight = $0; onUpdate() }
+                    set: { newValue in
+                        set.actualWeight = newValue
+                        autoFillDown(weight: newValue)
+                        onUpdate()
+                    }
                 )) {
                     ForEach(weights, id: \.self) { weight in
                         Text("\(weight, specifier: weight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f") кг").tag(weight)
@@ -425,7 +567,7 @@ struct SetRowView: View {
             } label: {
                 Text("\(set.actualWeight ?? set.exercise?.plannedWeight ?? 0, specifier: (set.actualWeight ?? set.exercise?.plannedWeight ?? 0).truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f")")
                     .font(.system(.subheadline, design: .monospaced)).bold()
-                    .frame(width: 70).padding(6)
+                    .frame(width: 55).padding(6)
                     .background(Color.white.opacity(0.05)).cornerRadius(8)
                     .foregroundStyle(.white)
             }
@@ -434,7 +576,11 @@ struct SetRowView: View {
             Menu {
                 Picker("Повт", selection: Binding(
                     get: { set.actualReps ?? set.plannedReps },
-                    set: { set.actualReps = $0; onUpdate() }
+                    set: { newValue in
+                        set.actualReps = newValue
+                        autoFillDown(reps: newValue)
+                        onUpdate()
+                    }
                 )) {
                     ForEach(repsRange, id: \.self) { rep in
                         Text("\(rep)").tag(rep)
@@ -443,9 +589,31 @@ struct SetRowView: View {
             } label: {
                 Text("\(set.actualReps ?? set.plannedReps)")
                     .font(.system(.subheadline, design: .monospaced)).bold()
-                    .frame(width: 60).padding(6)
+                    .frame(width: 45).padding(6)
                     .background(Color.white.opacity(0.05)).cornerRadius(8)
                     .foregroundStyle(.white)
+            }
+            
+            // RPE Picker
+            Menu {
+                Picker("RPE", selection: Binding(
+                    get: { set.rpe ?? 8 },
+                    set: { newValue in
+                        set.rpe = newValue
+                        autoFillDown(rpe: newValue)
+                        onUpdate()
+                    }
+                )) {
+                    ForEach(rpeRange, id: \.self) { val in
+                        Text("\(val)").tag(val)
+                    }
+                }
+            } label: {
+                Text("\(set.rpe ?? 8)")
+                    .font(.system(.subheadline, design: .monospaced)).bold()
+                    .frame(width: 40).padding(6)
+                    .background(Color.white.opacity(0.05)).cornerRadius(8)
+                    .foregroundStyle(set.rpe != nil ? .purple : .white)
             }
             
             Spacer()
@@ -465,6 +633,25 @@ struct SetRowView: View {
             .buttonStyle(.plain)
         }
         .foregroundStyle(set.isCompleted ? .white : .gray)
+    }
+    
+    private func autoFillDown(weight: Double? = nil, reps: Int? = nil, rpe: Int? = nil) {
+        guard let exercise = set.exercise else { return }
+        
+        // Находим все подходы этого упражнения, идущие после текущего и еще не выполненные
+        for otherSet in exercise.sets {
+            if otherSet.setNumber > set.setNumber && !otherSet.isCompleted {
+                if let weight = weight {
+                    otherSet.actualWeight = weight
+                }
+                if let reps = reps {
+                    otherSet.actualReps = reps
+                }
+                if let rpe = rpe {
+                    otherSet.rpe = rpe
+                }
+            }
+        }
     }
     
     private func toggleCompletion() {
