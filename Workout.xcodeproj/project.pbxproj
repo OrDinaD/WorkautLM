@@ -51,6 +51,13 @@
 			);
 			target = F5ABFA102F6991D20095B36F /* WorkoutWidgetExtension */;
 		};
+		F5EF50C82F729794001A8AEE /* Exceptions for "Workout" folder in "Workout" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F5BB9E4B2F62C15600C2A9C4 /* Workout */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -64,6 +71,9 @@
 		};
 		F5BB9E4E2F62C15600C2A9C4 /* Workout */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F5EF50C82F729794001A8AEE /* Exceptions for "Workout" folder in "Workout" target */,
+			);
 			path = Workout;
 			sourceTree = "<group>";
 		};
@@ -433,13 +443,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = WorkOut;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Workout/Workout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y85TSUMM4F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Workout/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Нам нужен доступ к данным о сне для отслеживания вашего восстановления и готовности к тренировкам.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Мы используем данные о сне для анализа вашего прогресса.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -468,13 +482,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = WorkOut;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Workout/Workout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y85TSUMM4F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Workout/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Нам нужен доступ к данным о сне для отслеживания вашего восстановления и готовности к тренировкам.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Мы используем данные о сне для анализа вашего прогресса.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

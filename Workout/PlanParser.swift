@@ -16,11 +16,13 @@ class PlanParser {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             
-            // Работаем только со строками таблицы Markdown
-            if trimmed.hasPrefix("|") && trimmed.hasSuffix("|") {
-                // Пропускаем разделители и заголовки
-                if trimmed.replacingOccurrences(of: " ", with: "").contains("-|") || 
-                   trimmed.contains("Упражнение") || trimmed.lowercased().contains("exercise") {
+            // Работаем со строками таблицы Markdown (достаточно префикса |)
+            if trimmed.hasPrefix("|") {
+                // Пропускаем разделители и заголовки. 
+                // Ищем как минимум два дефиса подряд, чтобы не спутать с прочерком '-' в данных
+                if trimmed.replacingOccurrences(of: " ", with: "").contains("--|") || 
+                   trimmed.contains("Упражнение") || 
+                   trimmed.lowercased().contains("exercise") {
                     continue
                 }
                 
@@ -38,10 +40,12 @@ class PlanParser {
                     let weightStr = components.count > 2 ? components[2] : ""
                     let techNotes = components.count > 3 ? components[3] : ""
                     
-                    // 2. Детекция разминки (по слову мин во второй колонке)
+                    // 2. Детекция разминки (более широкая)
                     let isWarmup = setsRepsStr.lowercased().contains("мин") || 
                                    setsRepsStr.lowercased().contains("min") ||
-                                   name.lowercased().contains("разминка")
+                                   name.lowercased().contains("разминка") ||
+                                   name.lowercased().contains("разогрев") ||
+                                   name.lowercased().contains("warmup")
                     
                     // 3. Парсинг веса
                     let weightValue = extractFirstNumber(from: weightStr)
@@ -56,16 +60,24 @@ class PlanParser {
                         setsCount = 1
                         repsCount = 1
                     } else {
-                        let normalized = setsRepsStr.lowercased().replacingOccurrences(of: "х", with: "x")
+                        // Чистим от markdown и нормализуем 'х'
+                        let normalized = displayReps.lowercased().replacingOccurrences(of: "х", with: "x")
+                        
                         let pattern = #"(\d+)\s*x\s*(\d+)"#
                         if let regex = try? NSRegularExpression(pattern: pattern, options: []),
                            let match = regex.firstMatch(in: normalized, options: [], range: NSRange(location: 0, length: normalized.utf16.count)) {
-                            if let sR = Range(match.range(at: 1), in: normalized), let rR = Range(match.range(at: 2), in: normalized) {
+                            if let sR = Range(match.range(at: 1), in: normalized), 
+                               let rR = Range(match.range(at: 2), in: normalized) {
                                 setsCount = Int(normalized[sR]) ?? 1
                                 repsCount = Int(normalized[rR]) ?? 10
                             }
-                        } else if let justReps = Int(normalized.filter { $0.isNumber }), justReps > 0 {
-                            repsCount = justReps
+                        } else {
+                            // Если это просто число или диапазон (например "10-15"), берем первое число
+                            let components = normalized.components(separatedBy: CharacterSet(charactersIn: "0123456789").inverted)
+                            if let firstNumStr = components.first(where: { !$0.isEmpty }), 
+                               let val = Int(firstNumStr) {
+                                repsCount = val
+                            }
                         }
                     }
                     
@@ -82,7 +94,8 @@ class PlanParser {
                         plannedWeightString: displayWeight == "-" ? nil : displayWeight,
                         plannedRepsString: displayReps == "-" ? nil : displayReps,
                         notes: "",
-                        recommendations: techNotes.replacingOccurrences(of: ". ", with: "\n")
+                        recommendations: techNotes.replacingOccurrences(of: ". ", with: "\n"),
+                        isWarmup: isWarmup
                     )
                     exercises.append(exercise)
                 }

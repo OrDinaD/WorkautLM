@@ -249,21 +249,41 @@ struct WorkoutExecutionView: View {
 struct PreWorkoutMetricsView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: WorkoutSession
+    @StateObject private var hkManager = HealthKitManager()
     
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 30) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Качество сна (часы)")
                             .font(.headline)
                             .foregroundStyle(.white)
-                        Stepper("\(session.sleepHours, specifier: "%.1f") ч", value: $session.sleepHours, in: 4...12, step: 0.5)
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(12)
-                            .foregroundStyle(.white)
+                        
+                        HStack {
+                            Stepper("\(session.sleepHours, specifier: "%.1f") ч", value: $session.sleepHours, in: 0...24, step: 0.5)
+                                .foregroundStyle(.white)
+                            
+                            Button(action: {
+                                hkManager.requestAuthorization()
+                            }) {
+                                Image(systemName: "arrow.clockwise.icloud")
+                                    .foregroundStyle(.purple)
+                            }
+                            .onChange(of: hkManager.sleepDurationToday) { oldValue, newValue in
+                                if newValue > 0 {
+                                    session.sleepHours = newValue
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        
+                        Text("Можно подтянуть из Apple Health")
+                            .font(.caption2)
+                            .foregroundStyle(.gray)
                     }
                     
                     VStack(alignment: .leading) {
@@ -516,10 +536,16 @@ struct ExerciseCardView: View {
             
             // Sets Table Header
             HStack {
-                Text("ПОДХОД").frame(width: 30, alignment: .leading)
-                Text("ВЕС").frame(width: 60, alignment: .center)
-                Text("ПОВТ").frame(width: 50, alignment: .center)
-                Text("RPE").frame(width: 50, alignment: .center)
+                if exercise.isWarmup {
+                    Text("РАЗМИНКА").frame(width: 70, alignment: .leading)
+                    Text("СКОРОСТЬ").frame(width: 80, alignment: .center)
+                    Text("ВРЕМЯ").frame(width: 60, alignment: .center)
+                } else {
+                    Text("ПОДХОД").frame(width: 40, alignment: .leading)
+                    Text("ВЕС").frame(width: 60, alignment: .center)
+                    Text("ПОВТ").frame(width: 50, alignment: .center)
+                    Text("RPE").frame(width: 50, alignment: .center)
+                }
                 Spacer()
                 Text("ГОТОВО")
             }
@@ -556,82 +582,138 @@ struct SetRowView: View {
         return values
     }()
     
+    // Available speeds (for warmup)
+    let speeds: [Double] = {
+        var values: [Double] = []
+        var current = 1.0
+        while current <= 25.0 { values.append(current); current += 0.5 }
+        return values
+    }()
+    
     let repsRange = Array(1...50)
+    let timeRange = Array(1...120) // up to 2 hours
     let rpeRange = Array(5...10)
     
     var body: some View {
         HStack {
-            // Set Number
-            Text("\(set.setNumber)")
-                .font(.subheadline)
-                .bold()
-                .frame(width: 25, alignment: .leading)
-                .foregroundStyle(set.isCompleted ? .purple : .gray)
-            
-            // Weight Picker
-            Menu {
-                Picker("Вес", selection: Binding(
-                    get: { set.actualWeight ?? set.exercise?.plannedWeight ?? 0 },
-                    set: { newValue in
-                        set.actualWeight = newValue
-                        autoFillDown(weight: newValue)
-                        onUpdate()
+            if let exercise = set.exercise, exercise.isWarmup {
+                // Warmup UI: Speed and Time
+                Text("Старт")
+                    .font(.caption).bold()
+                    .frame(width: 55, alignment: .leading)
+                    .foregroundStyle(set.isCompleted ? .purple : .gray)
+                
+                // Speed Picker (reusing actualWeight)
+                Menu {
+                    Picker("Скорость", selection: Binding(
+                        get: { set.actualWeight ?? 0 },
+                        set: { set.actualWeight = $0; onUpdate() }
+                    )) {
+                        ForEach(speeds, id: \.self) { speed in
+                            Text("\(speed, specifier: "%.1f") км/ч").tag(speed)
+                        }
                     }
-                )) {
-                    ForEach(weights, id: \.self) { weight in
-                        Text("\(weight, specifier: weight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f") кг").tag(weight)
-                    }
+                } label: {
+                    Text("\(set.actualWeight ?? 0, specifier: "%.1f")")
+                        .font(.system(.subheadline, design: .monospaced)).bold()
+                        .frame(width: 60).padding(6)
+                        .background(Color.white.opacity(0.05)).cornerRadius(8)
+                        .foregroundStyle(.white)
                 }
-            } label: {
-                Text("\(set.actualWeight ?? set.exercise?.plannedWeight ?? 0, specifier: (set.actualWeight ?? set.exercise?.plannedWeight ?? 0).truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f")")
-                    .font(.system(.subheadline, design: .monospaced)).bold()
-                    .frame(width: 55).padding(6)
-                    .background(Color.white.opacity(0.05)).cornerRadius(8)
-                    .foregroundStyle(.white)
-            }
-            
-            // Reps Picker
-            Menu {
-                Picker("Повт", selection: Binding(
-                    get: { set.actualReps ?? set.plannedReps },
-                    set: { newValue in
-                        set.actualReps = newValue
-                        autoFillDown(reps: newValue)
-                        onUpdate()
+                
+                Spacer().frame(width: 20)
+                
+                // Time Picker (reusing actualReps)
+                Menu {
+                    Picker("Время", selection: Binding(
+                        get: { set.actualReps ?? 5 },
+                        set: { set.actualReps = $0; onUpdate() }
+                    )) {
+                        ForEach(timeRange, id: \.self) { mins in
+                            Text("\(mins) мин").tag(mins)
+                        }
                     }
-                )) {
-                    ForEach(repsRange, id: \.self) { rep in
-                        Text("\(rep)").tag(rep)
-                    }
+                } label: {
+                    Text("\(set.actualReps ?? 5)м")
+                        .font(.system(.subheadline, design: .monospaced)).bold()
+                        .frame(width: 50).padding(6)
+                        .background(Color.white.opacity(0.05)).cornerRadius(8)
+                        .foregroundStyle(.white)
                 }
-            } label: {
-                Text("\(set.actualReps ?? set.plannedReps)")
-                    .font(.system(.subheadline, design: .monospaced)).bold()
-                    .frame(width: 45).padding(6)
-                    .background(Color.white.opacity(0.05)).cornerRadius(8)
-                    .foregroundStyle(.white)
-            }
-            
-            // RPE Picker
-            Menu {
-                Picker("RPE", selection: Binding(
-                    get: { set.rpe ?? 8 },
-                    set: { newValue in
-                        set.rpe = newValue
-                        autoFillDown(rpe: newValue)
-                        onUpdate()
+                
+            } else {
+                // Normal Exercise UI: Set, Weight, Reps, RPE
+                Text("\(set.setNumber)")
+                    .font(.subheadline)
+                    .bold()
+                    .frame(width: 25, alignment: .leading)
+                    .foregroundStyle(set.isCompleted ? .purple : .gray)
+                
+                // Weight Picker
+                Menu {
+                    Picker("Вес", selection: Binding(
+                        get: { set.actualWeight ?? set.exercise?.plannedWeight ?? 0 },
+                        set: { newValue in
+                            set.actualWeight = newValue
+                            autoFillDown(weight: newValue)
+                            onUpdate()
+                        }
+                    )) {
+                        ForEach(weights, id: \.self) { weight in
+                            Text("\(weight, specifier: weight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f") кг").tag(weight)
+                        }
                     }
-                )) {
-                    ForEach(rpeRange, id: \.self) { val in
-                        Text("\(val)").tag(val)
-                    }
+                } label: {
+                    Text("\(set.actualWeight ?? set.exercise?.plannedWeight ?? 0, specifier: (set.actualWeight ?? set.exercise?.plannedWeight ?? 0).truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f")")
+                        .font(.system(.subheadline, design: .monospaced)).bold()
+                        .frame(width: 55).padding(6)
+                        .background(Color.white.opacity(0.05)).cornerRadius(8)
+                        .foregroundStyle(.white)
                 }
-            } label: {
-                Text("\(set.rpe ?? 8)")
-                    .font(.system(.subheadline, design: .monospaced)).bold()
-                    .frame(width: 40).padding(6)
-                    .background(Color.white.opacity(0.05)).cornerRadius(8)
-                    .foregroundStyle(set.rpe != nil ? .purple : .white)
+                
+                // Reps Picker
+                Menu {
+                    Picker("Повт", selection: Binding(
+                        get: { set.actualReps ?? set.plannedReps },
+                        set: { newValue in
+                            set.actualReps = newValue
+                            autoFillDown(reps: newValue)
+                            onUpdate()
+                        }
+                    )) {
+                        ForEach(repsRange, id: \.self) { rep in
+                            Text("\(rep)").tag(rep)
+                        }
+                    }
+                } label: {
+                    Text("\(set.actualReps ?? set.plannedReps)")
+                        .font(.system(.subheadline, design: .monospaced)).bold()
+                        .frame(width: 45).padding(6)
+                        .background(Color.white.opacity(0.05)).cornerRadius(8)
+                        .foregroundStyle(.white)
+                }
+                
+                // RPE Picker
+                Menu {
+                    Picker("RPE", selection: Binding(
+                        get: { set.rpe ?? 8 },
+                        set: { newValue in
+                            set.rpe = newValue
+                            autoFillDown(rpe: newValue)
+                            onUpdate()
+                        }
+                    )) {
+                        ForEach(rpeRange, id: \.self) { val in
+                            Text("\(val)").tag(val)
+                        }
+                    }
+                } label: {
+                    Text("\(set.rpe ?? 8)")
+                        .font(.system(.subheadline, design: .monospaced)).bold()
+                        .frame(width: 40).padding(6)
+                        .background(Color.white.opacity(0.05)).cornerRadius(8)
+                        .foregroundStyle(set.rpe != nil ? .purple : .white)
+                }
             }
             
             Spacer()

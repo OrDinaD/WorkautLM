@@ -64,9 +64,20 @@ final class WorkoutSession {
     var dailyLog: DailyLog?
     var startTime: Date?
     
-    init(exercises: [Exercise] = [], startTime: Date = Date()) {
+    // Pre-workout metrics
+    var sleepHours: Double = 8.0
+    var stressLevel: Int = 1 // 0: Low, 1: Medium, 2: High
+    
+    // Post-workout metrics (MEV)
+    var pump: Int?     // 0, 1, 2
+    var tension: Int?  // 0, 1, 2
+    var soreness: Int? // 0, 1, 2 (Крепатура)
+    
+    init(exercises: [Exercise] = [], startTime: Date = Date(), sleepHours: Double = 8.0, stressLevel: Int = 1) {
         self.exercises = exercises
         self.startTime = startTime
+        self.sleepHours = sleepHours
+        self.stressLevel = stressLevel
     }
 }
 
@@ -83,9 +94,10 @@ final class Exercise {
     var plannedRepsString: String?   // To store ranges like "12-15"
     var notes: String
     var recommendations: String? // Optional for migration
+    var isWarmup: Bool = false
     var workout: WorkoutSession?
     
-    init(name: String = "", orderIndex: Int? = 0, sets: [WorkoutSet] = [], plannedWeight: Double = 0, plannedWeightString: String? = nil, plannedRepsString: String? = nil, notes: String = "", recommendations: String? = "") {
+    init(name: String = "", orderIndex: Int? = 0, sets: [WorkoutSet] = [], plannedWeight: Double = 0, plannedWeightString: String? = nil, plannedRepsString: String? = nil, notes: String = "", recommendations: String? = "", isWarmup: Bool = false) {
         self.name = name
         self.orderIndex = orderIndex
         self.sets = sets
@@ -94,6 +106,7 @@ final class Exercise {
         self.plannedRepsString = plannedRepsString
         self.notes = notes
         self.recommendations = recommendations
+        self.isWarmup = isWarmup
     }
 }
 
@@ -103,15 +116,17 @@ final class WorkoutSet {
     var plannedReps: Int
     var actualReps: Int?
     var actualWeight: Double?
+    var rpe: Int? // 5-10
     var isCompleted: Bool
     var completionTime: Date?
     var exercise: Exercise?
     
-    init(setNumber: Int = 1, plannedReps: Int = 10, actualReps: Int? = nil, actualWeight: Double? = nil, isCompleted: Bool = false, completionTime: Date? = nil) {
+    init(setNumber: Int = 1, plannedReps: Int = 10, actualReps: Int? = nil, actualWeight: Double? = nil, rpe: Int? = nil, isCompleted: Bool = false, completionTime: Date? = nil) {
         self.setNumber = setNumber
         self.plannedReps = plannedReps
         self.actualReps = actualReps
         self.actualWeight = actualWeight
+        self.rpe = rpe
         self.isCompleted = isCompleted
         self.completionTime = completionTime
     }
