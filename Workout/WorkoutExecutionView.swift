@@ -401,6 +401,19 @@ struct ExerciseCardView: View {
     @State private var isRecommendationsExpanded: Bool = false
     var onUpdate: () -> Void
     
+    private var processedRecommendations: AttributedString {
+        guard let recs = exercise.recommendations else { return AttributedString("") }
+        // Удаляем ссылки вида [1], [2] и т.д.
+        let cleaned = recs.replacingOccurrences(of: #"\s*\[\d+\]"#, with: "", options: .regularExpression)
+        
+        do {
+            // Поддержка Markdown (включая **жирный**)
+            return try AttributedString(markdown: cleaned)
+        } catch {
+            return AttributedString(cleaned)
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
@@ -451,23 +464,27 @@ struct ExerciseCardView: View {
             
             if let recs = exercise.recommendations, !recs.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Рекомендации:")
-                        .font(.caption2)
-                        .bold()
-                        .foregroundStyle(.purple)
+                    HStack {
+                        Text("Рекомендации:")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundStyle(.purple)
+                        Spacer()
+                    }
                     
-                    Text(recs)
+                    Text(processedRecommendations)
                         .font(.caption)
                         .foregroundStyle(.gray)
                         .lineLimit(isRecommendationsExpanded ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: isRecommendationsExpanded)
                         .onTapGesture {
-                            withAnimation {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 isRecommendationsExpanded.toggle()
                             }
                         }
                     
                     Button(action: {
-                        withAnimation {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             isRecommendationsExpanded.toggle()
                         }
                     }) {
@@ -478,6 +495,7 @@ struct ExerciseCardView: View {
                     }
                 }
                 .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.purple.opacity(0.05))
                 .cornerRadius(8)
             }
