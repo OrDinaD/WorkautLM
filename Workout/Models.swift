@@ -63,6 +63,7 @@ final class WorkoutSession {
     
     var dailyLog: DailyLog?
     var startTime: Date?
+    var endTime: Date?
     
     // Pre-workout metrics
     var sleepHours: Double = 8.0

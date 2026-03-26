@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import ActivityKit
+import Combine
 
 struct ExportData: Identifiable {
     let id = UUID()
@@ -15,9 +16,13 @@ struct WorkoutExecutionView: View {
     @State private var currentActivity: Activity<WorkoutAttributes>?
     @State private var showingPreWorkoutMetrics = false
     @State private var showingPostWorkoutMetrics = false
-
+    
+    @State private var restTimeRemaining = 90
+    @State private var isRestTimerActive = false
+    @StateObject private var hkManager = HealthKitManager()
+    
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
             
             VStack {
@@ -48,7 +53,12 @@ struct WorkoutExecutionView: View {
                         }
 
                         ForEach(session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })) { exercise in
-                            ExerciseCardView(exercise: exercise, onUpdate: updateActivity)
+                            ExerciseCardView(exercise: exercise, onUpdate: updateActivity, onSetCompleted: {
+                                withAnimation {
+                                    restTimeRemaining = 90
+                                    isRestTimerActive = true
+                                }
+                            })
                                 .listRowBackground(Color.black)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -66,18 +76,26 @@ struct WorkoutExecutionView: View {
             
             // Floating Action Button для режима тренировки
             if !session.exercises.isEmpty {
-                Button(action: toggleLiveActivity) {
+                VStack {
+                    RestTimerView(remainingTime: $restTimeRemaining, isActive: $isRestTimerActive)
+                        .padding(.bottom, 8)
+                    
                     HStack {
-                        Image(systemName: currentActivity == nil ? "play.fill" : "stop.fill")
-                        Text(currentActivity == nil ? "Начать режим тренировки" : "Завершить режим")
-                            .fontWeight(.bold)
+                        Spacer()
+                        Button(action: toggleLiveActivity) {
+                            HStack {
+                                Image(systemName: currentActivity == nil ? "play.fill" : "stop.fill")
+                                Text(currentActivity == nil ? "Начать режим тренировки" : "Завершить режим")
+                                    .fontWeight(.bold)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 15)
+                            .background(currentActivity == nil ? Color.green : Color.red)
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
+                            .shadow(color: (currentActivity == nil ? Color.green : Color.red).opacity(0.3), radius: 10, x: 0, y: 5)
+                        }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 15)
-                    .background(currentActivity == nil ? Color.green : Color.red)
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .shadow(color: (currentActivity == nil ? Color.green : Color.red).opacity(0.3), radius: 10, x: 0, y: 5)
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 20)
@@ -125,9 +143,12 @@ struct WorkoutExecutionView: View {
             Task {
                 await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
                 currentActivity = nil
+                session.endTime = Date()
+                hkManager.saveWorkout(session: session)
                 showingPostWorkoutMetrics = true // Show post-workout metrics when finishing activity
             }
         } else {
+            session.startTime = Date()
             showingPreWorkoutMetrics = true // Show pre-workout metrics before starting activity
             startActivity()
         }
@@ -241,6 +262,49 @@ struct WorkoutExecutionView: View {
         }
         
         exportData = ExportData(text: markdown)
+    }
+}
+
+struct RestTimerView: View {
+    @Binding var remainingTime: Int
+    @Binding var isActive: Bool
+    
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        if isActive && remainingTime > 0 {
+            HStack {
+                Image(systemName: "timer")
+                    .foregroundStyle(.purple)
+                Text("Отдых: \(timeString(remainingTime))")
+                    .font(.system(.subheadline, design: .monospaced))
+                    .bold()
+                    .foregroundStyle(.white)
+                
+                Button(action: { isActive = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.gray)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.purple.opacity(0.2))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.purple.opacity(0.5), lineWidth: 1))
+            .onReceive(timer) { _ in
+                if remainingTime > 0 {
+                    remainingTime -= 1
+                } else {
+                    isActive = false
+                }
+            }
+        }
+    }
+    
+    func timeString(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 }
 
@@ -420,6 +484,7 @@ struct ExerciseCardView: View {
     @Bindable var exercise: Exercise
     @State private var isRecommendationsExpanded: Bool = false
     var onUpdate: () -> Void
+    var onSetCompleted: () -> Void
     
     private var processedRecommendations: AttributedString {
         guard let recs = exercise.recommendations else { return AttributedString("") }
@@ -555,7 +620,7 @@ struct ExerciseCardView: View {
             
             // Sets List
             ForEach(exercise.sets.sorted(by: { $0.setNumber < $1.setNumber })) { set in
-                SetRowView(set: set, onUpdate: onUpdate)
+                SetRowView(set: set, onUpdate: onUpdate, onSetCompleted: onSetCompleted)
             }
         }
         .padding()
@@ -571,6 +636,7 @@ struct ExerciseCardView: View {
 struct SetRowView: View {
     @Bindable var set: WorkoutSet
     var onUpdate: () -> Void
+    var onSetCompleted: () -> Void
     
     // Available weights
     let weights: [Double] = {
@@ -762,6 +828,7 @@ struct SetRowView: View {
                 if set.actualWeight == nil || set.actualWeight == 0 { set.actualWeight = set.exercise?.plannedWeight }
                 if set.actualReps == nil || set.actualReps == 0 { set.actualReps = set.plannedReps }
                 let generator = UIImpactFeedbackGenerator(style: .medium); generator.impactOccurred()
+                onSetCompleted()
             } else {
                 set.completionTime = nil
             }

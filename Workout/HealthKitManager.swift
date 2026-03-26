@@ -11,11 +11,60 @@ class HealthKitManager: ObservableObject {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         
         let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
-        let typesToRead: Set = [sleepType]
+        let workoutType = HKObjectType.workoutType()
         
-        healthStore.requestAuthorization(toShare: nil, read: typesToRead) { (success, error) in
+        let typesToRead: Set = [sleepType]
+        let typesToWrite: Set = [workoutType]
+        
+        healthStore.requestAuthorization(toShare: typesToWrite, read: typesToRead) { (success, error) in
             if success {
                 self.fetchSleepData()
+            }
+        }
+    }
+    
+    func saveWorkout(session: WorkoutSession) {
+        guard let startDate = session.startTime else { return }
+        let endDate = session.endTime ?? Date()
+        
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .traditionalStrengthTraining
+        configuration.locationType = .unknown
+        
+        let builder = HKWorkoutBuilder(healthStore: healthStore, configuration: configuration, device: .local())
+        
+        builder.beginCollection(withStart: startDate) { (success, error) in
+            guard success else {
+                print("Error beginning workout collection: \(error?.localizedDescription ?? "unknown")")
+                return
+            }
+            
+            let metadata: [String: Any] = [
+                HKMetadataKeyWorkoutBrandName: "WorkautLM",
+                "SleepDuration": session.sleepHours,
+                "StressLevel": session.stressLevel
+            ]
+            
+            builder.addMetadata(metadata) { (success, error) in
+                guard success else {
+                    print("Error adding metadata: \(error?.localizedDescription ?? "unknown")")
+                    return
+                }
+                
+                builder.endCollection(withEnd: endDate) { (success, error) in
+                    guard success else {
+                        print("Error ending workout collection: \(error?.localizedDescription ?? "unknown")")
+                        return
+                    }
+                    
+                    builder.finishWorkout { (workout, error) in
+                        if workout != nil {
+                            print("Workout successfully saved to HealthKit")
+                        } else {
+                            print("Error finishing workout: \(error?.localizedDescription ?? "unknown")")
+                        }
+                    }
+                }
             }
         }
     }
