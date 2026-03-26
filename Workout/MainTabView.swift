@@ -13,6 +13,11 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Отдых", systemImage: "bed.double.fill")
                 }
+            
+            GymPassView()
+                .tabItem {
+                    Label("Инфо", systemImage: "info.circle.fill")
+                }
         }
         .tint(.purple)
     }
