@@ -14,8 +14,6 @@ struct WorkoutExecutionView: View {
     
     @State private var exportData: ExportData?
     @State private var currentActivity: Activity<WorkoutAttributes>?
-    @State private var showingPreWorkoutMetrics = false
-    @State private var showingPostWorkoutMetrics = false
     
     @State private var restTimeRemaining = 90
     @State private var isRestTimerActive = false
@@ -115,12 +113,6 @@ struct WorkoutExecutionView: View {
         .sheet(item: $exportData) { data in
             MarkdownExportView(text: data.text)
         }
-        .sheet(isPresented: $showingPreWorkoutMetrics) {
-            PreWorkoutMetricsView(session: session)
-        }
-        .sheet(isPresented: $showingPostWorkoutMetrics) {
-            PostWorkoutMetricsView(session: session)
-        }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(Color.black, for: .navigationBar)
@@ -145,11 +137,9 @@ struct WorkoutExecutionView: View {
                 currentActivity = nil
                 session.endTime = Date()
                 hkManager.saveWorkout(session: session)
-                showingPostWorkoutMetrics = true // Show post-workout metrics when finishing activity
             }
         } else {
             session.startTime = Date()
-            showingPreWorkoutMetrics = true // Show pre-workout metrics before starting activity
             startActivity()
         }
     }
@@ -236,8 +226,7 @@ struct WorkoutExecutionView: View {
         let dateStr = formatter.string(from: date)
         let timeStr = timeFormatter.string(from: date)
         
-        var markdown = "Тренировка: \(dateStr) (Начало: \(timeStr))\n"
-        markdown += "Сон: \(String(format: "%.1f", session.sleepHours)) ч, Стресс: \(session.stressLevel == 0 ? "Низкий" : (session.stressLevel == 1 ? "Средний" : "Высокий"))\n\n"
+        var markdown = "Тренировка: \(dateStr) (Начало: \(timeStr))\n\n"
         
         markdown += "| Упражнение | Подход | Вес | Повт | RPE | Заметки |\n"
         markdown += "|---|---|---|---|---|---|\n"
@@ -253,12 +242,6 @@ struct WorkoutExecutionView: View {
                 let notes = index == 0 ? exercise.notes.replacingOccurrences(of: "\n", with: " ") : ""
                 markdown += "| \(exercise.name) | \(set.setNumber) | \(weight) кг | \(status)\(reps) | \(rpe) | \(notes) |\n"
             }
-        }
-        
-        if let pump = session.pump {
-            markdown += "\nОценка после:\n- Памп: \(pump)\n"
-            markdown += "- Напряжение: \(session.tension ?? 0)\n"
-            markdown += "- Крепатура: \(session.soreness ?? 0)\n"
         }
         
         exportData = ExportData(text: markdown)
@@ -305,143 +288,6 @@ struct RestTimerView: View {
         let m = seconds / 60
         let s = seconds % 60
         return String(format: "%d:%02d", m, s)
-    }
-}
-
-// MARK: - Metrics Views
-
-struct PreWorkoutMetricsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Bindable var session: WorkoutSession
-    @StateObject private var hkManager = HealthKitManager()
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                VStack(spacing: 30) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Качество сна (часы)")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                        
-                        HStack {
-                            Stepper("\(session.sleepHours, specifier: "%.1f") ч", value: $session.sleepHours, in: 0...24, step: 0.5)
-                                .foregroundStyle(.white)
-                            
-                            Button(action: {
-                                hkManager.requestAuthorization()
-                            }) {
-                                Image(systemName: "arrow.clockwise.icloud")
-                                    .foregroundStyle(.purple)
-                            }
-                            .onChange(of: hkManager.sleepDurationToday) { oldValue, newValue in
-                                if newValue > 0 {
-                                    session.sleepHours = newValue
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        
-                        Text("Можно подтянуть из Apple Health")
-                            .font(.caption2)
-                            .foregroundStyle(.gray)
-                    }
-                    
-                    VStack(alignment: .leading) {
-                        Text("Уровень стресса")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                        Picker("Стресс", selection: $session.stressLevel) {
-                            Text("Низкий").tag(0)
-                            Text("Средний").tag(1)
-                            Text("Высокий").tag(2)
-                        }
-                        .pickerStyle(.segmented)
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    
-                    Spacer()
-                    
-                    Button("Начать тренировку") {
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.purple)
-                    .controlSize(.large)
-                }
-                .padding(20)
-            }
-            .navigationTitle("Пре-воркаут метрики")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-struct PostWorkoutMetricsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Bindable var session: WorkoutSession
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 25) {
-                        MetricSelector(title: "Памп", description: "Наполненность мышц", value: Binding(get: { session.pump ?? 1 }, set: { session.pump = $0 }))
-                        MetricSelector(title: "Напряжение", description: "Чувство целевых мышц", value: Binding(get: { session.tension ?? 1 }, set: { session.tension = $0 }))
-                        MetricSelector(title: "Крепатура", description: "Утомление и боль", value: Binding(get: { session.soreness ?? 1 }, set: { session.soreness = $0 }))
-                        
-                        Spacer()
-                        
-                        Button("Завершить") {
-                            dismiss()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.purple)
-                        .controlSize(.large)
-                        .padding(.top, 20)
-                    }
-                    .padding(20)
-                }
-            }
-            .navigationTitle("Итоги тренировки (MEV)")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-struct MetricSelector: View {
-    let title: String
-    let description: String
-    @Binding var value: Int
-    
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.white)
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.gray)
-            
-            Picker(title, selection: $value) {
-                Text("0 - Нет").tag(0)
-                Text("1 - Норма").tag(1)
-                Text("2 - Предел").tag(2)
-            }
-            .pickerStyle(.segmented)
-            .padding(.top, 5)
-        }
-        .padding()
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
     }
 }
 

@@ -13,7 +13,7 @@ struct WorkoutApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
         .modelContainer(for: [
             DailyLog.self,

@@ -1,10 +1,29 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
+import CoreMotion
+import Combine
+
+class MotionManager: ObservableObject {
+    private let manager = CMMotionManager()
+    @Published var pitch: Double = 0.0
+    @Published var roll: Double = 0.0
+    
+    init() {
+        manager.deviceMotionUpdateInterval = 1/60
+        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+            guard let motion = motion else { return }
+            self?.pitch = motion.attitude.pitch
+            self?.roll = motion.attitude.roll
+        }
+    }
+}
 
 struct GymPassView: View {
     let barcodeData = "4813664623609" // EAN-13 from image
     let startDate = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 13))!
     let endDate = Calendar.current.date(from: DateComponents(year: 2026, month: 4, day: 7))!
+    
+    @StateObject private var motion = MotionManager()
     
     var body: some View {
         NavigationView {
@@ -46,11 +65,35 @@ struct GymPassView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(red: 20/255, green: 50/255, blue: 160/255)) // Darker blue like in photo
-                        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(red: 20/255, green: 50/255, blue: 160/255))
+                        
+                        // Tilt-responsive shimmer effect
+                        GeometryReader { geo in
+                            let shimmerX = CGFloat(motion.roll) * 1.5
+                            let shimmerY = CGFloat(motion.pitch) * 1.5
+                            
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    .clear,
+                                    .white.opacity(0.05),
+                                    .white.opacity(0.2),
+                                    .white.opacity(0.05),
+                                    .clear
+                                ]),
+                                startPoint: UnitPoint(x: 0.5 - shimmerX, y: 0.5 - shimmerY),
+                                endPoint: UnitPoint(x: 0.5 + shimmerX, y: 0.5 + shimmerY)
+                            )
+                            .blendMode(.screen)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
                 )
                 .padding(.horizontal)
+                .rotation3DEffect(.degrees(motion.roll * 10), axis: (x: 0, y: 1, z: 0))
+                .rotation3DEffect(.degrees(-motion.pitch * 10), axis: (x: 1, y: 0, z: 0))
                 
                 // Validity Status
                 VStack(alignment: .leading, spacing: 8) {
@@ -93,7 +136,7 @@ struct GymPassView: View {
     
     func generateBarcode(from string: String) -> UIImage? {
         let context = CIContext()
-        let filter = CIFilter.code128BarcodeGenerator() // Code 128 is widely supported by scanners
+        let filter = CIFilter.code128BarcodeGenerator()
         filter.message = Data(string.utf8)
         
         if let outputImage = filter.outputImage {

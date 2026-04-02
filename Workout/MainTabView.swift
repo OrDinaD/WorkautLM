@@ -2,6 +2,16 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
+    init() {
+        // Настройка внешнего вида TabBar для темной темы
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = .black
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+    
     var body: some View {
         TabView {
             ContentView()
@@ -20,6 +30,7 @@ struct MainTabView: View {
                 }
         }
         .tint(.purple)
+        .preferredColorScheme(.dark)
     }
 }
 

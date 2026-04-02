@@ -1,0 +1,55 @@
+name: Build IPA for AltStore
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Build Archive (Unsigned/Development)
+        run: |
+          xcodebuild archive \
+            -project Workout/Workout.xcodeproj \
+            -scheme Workout \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/Workout.xcarchive \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export IPA
+        run: |
+          # Create temporary Payload folder for manual IPA creation
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -R $RUNNER_TEMP/Workout.xcarchive/Products/Applications/Workout.app $RUNNER_TEMP/Payload/
+          
+          # Zip into .ipa
+          cd $RUNNER_TEMP
+          zip -r Workout.ipa Payload
+          
+          # Move to a reachable path
+          mkdir -p $GITHUB_WORKSPACE/build
+          mv Workout.ipa $GITHUB_WORKSPACE/build/
+
+      - name: Create Release and Upload IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: AltStore Build ${{ github.run_number }}
+          files: |
+            build/Workout.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
