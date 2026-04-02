@@ -1,0 +1,22 @@
+{
+  "name": "Workaut Source",
+  "identifier": "com.ordinad.workaut",
+  "apps": [
+    {
+      "name": "Workaut",
+      "bundleIdentifier": "OrDinaD.Workout",
+      "developerName": "OrDinaD",
+      "localizedDescription": "Modern workout tracker",
+      "versions": [
+        {
+          "version": "1.0.4",
+          "date": "2026-04-02T13:20:54Z",
+          "size": 3352599,
+          "downloadURL": "https://OrDinaD.github.io/WorkautLM/Workout.ipa",
+          "localizedDescription": "Release version 1.0.4"
+        }
+      ],
+      "iconURL": "https://OrDinaD.github.io/WorkautLM/icon.png"
+    }
+  ]
+}
