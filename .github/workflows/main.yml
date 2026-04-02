@@ -1,55 +1,178 @@
-name: Build IPA for AltStore
+name: Build and Deploy to AltStore Source
 
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+
 jobs:
-  build:
+  build-and-release:
     runs-on: macos-14
     
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Xcode
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0'
-
-      - name: Build Archive (Unsigned/Development)
+          xcode-version: latest-stable
+      
+      - name: Set Version
+        id: version
         run: |
-          xcodebuild archive \
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="1.0.${{ github.run_number }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Update version in project file
+          sed -i '' "s/MARKETING_VERSION = .*;/MARKETING_VERSION = $VERSION;/g" Workout/Workout.xcodeproj/project.pbxproj
+          echo "Version: $VERSION"
+
+      - name: Build unsigned IPA
+        id: build
+        run: |
+          mkdir -p build
+          
+          # Archive project
+          xcodebuild clean archive \
             -project Workout/Workout.xcodeproj \
             -scheme Workout \
             -configuration Release \
-            -archivePath $RUNNER_TEMP/Workout.xcarchive \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Export IPA
-        run: |
-          # Create temporary Payload folder for manual IPA creation
-          mkdir -p $RUNNER_TEMP/Payload
-          cp -R $RUNNER_TEMP/Workout.xcarchive/Products/Applications/Workout.app $RUNNER_TEMP/Payload/
+            -archivePath build/Workout.xcarchive \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
           
-          # Zip into .ipa
-          cd $RUNNER_TEMP
+          # Export to IPA
+          mkdir -p build/Payload
+          cp -r build/Workout.xcarchive/Products/Applications/Workout.app build/Payload/
+          
+          cd build
           zip -r Workout.ipa Payload
+          cd ..
           
-          # Move to a reachable path
-          mkdir -p $GITHUB_WORKSPACE/build
-          mv Workout.ipa $GITHUB_WORKSPACE/build/
+          # Copy for GitHub Pages
+          cp build/Workout.ipa ./Workout.ipa
+          
+          # Try to find icon - taking the one from Media as fallback
+          cp Workout/Media/WorkOut-iOS-Default-1024x1024@1x.png ./icon.png || echo "Icon not found"
+          
+          FILE_SIZE=$(stat -f%z build/Workout.ipa)
+          echo "ipa_size=$FILE_SIZE" >> $GITHUB_OUTPUT
+          echo "IPA size: $FILE_SIZE bytes"
 
-      - name: Create Release and Upload IPA
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          name: AltStore Build ${{ github.run_number }}
-          files: |
-            build/Workout.ipa
+          files: build/Workout.ipa
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update apps.json
+        run: |
+          # Create apps.json if not exists
+          if [ ! -f apps.json ]; then
+            echo '{
+              "name": "Workaut Source",
+              "identifier": "com.ordinad.workaut",
+              "apps": [
+                {
+                  "name": "Workaut",
+                  "bundleIdentifier": "OrDinaD.Workout",
+                  "developerName": "OrDinaD",
+                  "localizedDescription": "Modern workout tracker",
+                  "versions": []
+                }
+              ]
+            }' > apps.json
+          fi
+
+          python3 << 'EOF'
+          import json
+          import os
+          from datetime import datetime, timezone
+          
+          try:
+              with open('apps.json', 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+              
+              version = os.environ.get('APP_VERSION', '1.0.0')
+              file_size_str = os.environ.get('IPA_SIZE', '0')
+              file_size = int(file_size_str) if file_size_str else 0
+              repo_name = os.environ.get('GITHUB_REPOSITORY', '')
+              user_name = repo_name.split('/')[0]
+              
+              download_url = f"https://{user_name}.github.io/WorkautLM/Workout.ipa"
+              icon_url = f"https://{user_name}.github.io/WorkautLM/icon.png"
+              
+              current_date = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+              
+              new_version = {
+                  "version": version,
+                  "date": current_date,
+                  "size": file_size,
+                  "downloadURL": download_url,
+                  "localizedDescription": f"Release version {version}"
+              }
+              
+              found = False
+              for app in data['apps']:
+                  if app['bundleIdentifier'] == 'OrDinaD.Workout':
+                      app['iconURL'] = icon_url
+                      
+                      # Remove version if it already exists to replace it
+                      app['versions'] = [v for v in app['versions'] if v['version'] != version]
+                      app['versions'].insert(0, new_version)
+                      app['versions'] = app['versions'][:10]
+                      found = True
+                      break
+              
+              if not found:
+                  print("App with bundleIdentifier OrDinaD.Workout not found in apps.json")
+                  exit(1)
+
+              with open('apps.json', 'w', encoding='utf-8') as f:
+                  json.dump(data, f, indent=2, ensure_ascii=False)
+                  f.write('\n')
+              print(f"Updated apps.json to version {version}")
+          except Exception as e:
+              print(f"Error: {e}")
+              exit(1)
+          EOF
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          IPA_SIZE: ${{ steps.build.outputs.ipa_size }}
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add files even if ignored
+          git add -f apps.json Workout.ipa icon.png
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update AltStore source: v${{ steps.version.outputs.version }}"
+            git push origin HEAD:main --force
+          fi
