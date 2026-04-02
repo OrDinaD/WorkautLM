@@ -38,7 +38,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
           # Update version in project file
-          sed -i '' "s/MARKETING_VERSION = .*;/MARKETING_VERSION = $VERSION;/g" Workout/Workout.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION = .*;/MARKETING_VERSION = $VERSION;/g" Workout.xcodeproj/project.pbxproj
           echo "Version: $VERSION"
 
       - name: Build unsigned IPA
@@ -48,7 +48,7 @@ jobs:
           
           # Archive project
           xcodebuild clean archive \
-            -project Workout/Workout.xcodeproj \
+            -project Workout.xcodeproj \
             -scheme Workout \
             -configuration Release \
             -archivePath build/Workout.xcarchive \
@@ -70,7 +70,7 @@ jobs:
           cp build/Workout.ipa ./Workout.ipa
           
           # Try to find icon - taking the one from Media as fallback
-          cp Workout/Media/WorkOut-iOS-Default-1024x1024@1x.png ./icon.png || echo "Icon not found"
+          cp Media/WorkOut-iOS-Default-1024x1024@1x.png ./icon.png || echo "Icon not found"
           
           FILE_SIZE=$(stat -f%z build/Workout.ipa)
           echo "ipa_size=$FILE_SIZE" >> $GITHUB_OUTPUT
