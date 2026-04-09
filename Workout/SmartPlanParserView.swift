@@ -114,12 +114,22 @@ struct SmartPlanParserView: View {
                     }
                 }
                 
-                if let exercises = parsedWorkout?.exercises, !exercises.isEmpty {
+                if parsedWorkout != nil {
                     Section {
-                        ForEach(0..<(parsedWorkout?.exercises.count ?? 0), id: \.self) { index in
+                        ForEach(Array((parsedWorkout?.exercises ?? []).enumerated()), id: \.element) { index, exercise in
                             exerciseEditRow(index: index)
                                 .listRowBackground(Color.black)
                         }
+                        .onDelete(perform: deleteExercises)
+                        
+                        Button(action: addExercise) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Добавить упражнение")
+                            }
+                            .foregroundStyle(.purple)
+                        }
+                        .listRowBackground(Color.black)
                     } header: {
                         Text("Тренировка").foregroundStyle(.purple)
                     }
@@ -238,6 +248,26 @@ struct SmartPlanParserView: View {
         }
     }
     
+    private func deleteExercises(at offsets: IndexSet) {
+        parsedWorkout?.exercises.remove(atOffsets: offsets)
+        // No need to re-index here, savePlan will handle it
+    }
+    
+    private func addExercise() {
+        let newExercise = Exercise(
+            name: "",
+            orderIndex: (parsedWorkout?.exercises.count ?? 0) + 1,
+            sets: [WorkoutSet(setNumber: 1, plannedReps: 10)],
+            plannedWeight: 0,
+            plannedWeightString: nil,
+            plannedRepsString: nil,
+            notes: "",
+            recommendations: "",
+            isWarmup: false
+        )
+        parsedWorkout?.exercises.append(newExercise)
+    }
+    
     private func savePlan() {
         guard let parsed = parsedWorkout else { return }
         
@@ -267,7 +297,8 @@ struct SmartPlanParserView: View {
         }
         
         // Add exercises to the session
-        for exercise in parsed.exercises {
+        for (index, exercise) in parsed.exercises.enumerated() {
+            exercise.orderIndex = index + 1
             session.exercises.append(exercise)
         }
         

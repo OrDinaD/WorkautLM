@@ -17,6 +17,15 @@ class PlanParser {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             
+            let lowerTrimmed = trimmed.lowercased()
+            
+            // 0. Skip obvious headers or system lines
+            let headers = ["упражнение", "подходы", "целевой вес", "техника и заметки", "exercise", "sets", "reps", "weight", "notes"]
+            if headers.contains(where: { lowerTrimmed.contains($0) }) && !lowerTrimmed.contains("x") && !lowerTrimmed.contains("х") {
+                generalNotes.append(line)
+                continue
+            }
+
             // 1. Table Detection (with or without leading/trailing pipes)
             if trimmed.contains("|") {
                 // Skip separators/headers
@@ -35,7 +44,7 @@ class PlanParser {
                     }
                     name = name.trimmingCharacters(in: .whitespaces)
                     
-                    if skipNames.contains(name.lowercased()) {
+                    if skipNames.contains(where: { name.lowercased().hasPrefix($0) }) {
                         generalNotes.append(line)
                         continue
                     }
@@ -72,7 +81,7 @@ class PlanParser {
                 name = name.trimmingCharacters(in: .whitespaces)
                 
                 if !name.isEmpty {
-                    if skipNames.contains(name.lowercased()) {
+                    if skipNames.contains(where: { name.lowercased().hasPrefix($0) }) {
                         generalNotes.append(line)
                         continue
                     }
