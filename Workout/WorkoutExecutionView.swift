@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import ActivityKit
 import Combine
+import UserNotifications
 
 struct ExportData: Identifiable {
     let id = UUID()
@@ -10,6 +11,7 @@ struct ExportData: Identifiable {
 
 struct WorkoutExecutionView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var session: WorkoutSession
     
     @State private var exportData: ExportData?
@@ -17,7 +19,19 @@ struct WorkoutExecutionView: View {
     
     @State private var restTimeRemaining = 90
     @State private var isRestTimerActive = false
+    @State private var restEndTime: Date? = nil
+    
     @StateObject private var hkManager = HealthKitManager()
+    
+    @State private var isCompletedSectionExpanded: Bool = false
+    
+    // For Exercise Replacement
+    @State private var showingRenameAlert = false
+    @State private var exerciseToRename: Exercise? = nil
+    @State private var newExerciseName = ""
+    
+    @State private var recentlyCompletedExerciseIDs: Set<PersistentIdentifier> = []
+    @Namespace private var animation
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -50,16 +64,70 @@ struct WorkoutExecutionView: View {
                             Text("Время и дата").foregroundStyle(.gray)
                         }
 
-                        ForEach(session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })) { exercise in
-                            ExerciseCardView(exercise: exercise, onUpdate: updateActivity, onSetCompleted: {
-                                withAnimation {
-                                    restTimeRemaining = 90
-                                    isRestTimerActive = true
+                        let allExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
+                        let activeExercises = allExercises.filter { !$0.isCompleted || recentlyCompletedExerciseIDs.contains($0.id) }
+                        let completedExercises = allExercises.filter { $0.isCompleted && !recentlyCompletedExerciseIDs.contains($0.id) }
+
+                        // Active Exercises
+                        ForEach(activeExercises) { exercise in
+                            ExerciseCardView(
+                                exercise: exercise,
+                                onUpdate: updateActivity,
+                                onSetCompleted: {
+                                    handleSetCompleted(for: exercise)
+                                },
+                                onRename: {
+                                    exerciseToRename = exercise
+                                    newExerciseName = exercise.name
+                                    showingRenameAlert = true
                                 }
-                            })
+                            )
+                                .matchedGeometryEffect(id: exercise.id, in: animation)
                                 .listRowBackground(Color.black)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        }
+
+                        // Completed Exercises Section
+                        if !completedExercises.isEmpty {
+                            Section {
+                                DisclosureGroup(isExpanded: $isCompletedSectionExpanded) {
+                                    ForEach(completedExercises) { exercise in
+                                        ExerciseCardView(
+                                            exercise: exercise,
+                                            onUpdate: updateActivity,
+                                            onSetCompleted: {
+                                                handleSetCompleted(for: exercise)
+                                            },
+                                            onRename: {
+                                                exerciseToRename = exercise
+                                                newExerciseName = exercise.name
+                                                showingRenameAlert = true
+                                            }
+                                        )
+                                        .matchedGeometryEffect(id: exercise.id, in: animation)
+                                        .listRowBackground(Color.black)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text("Выполненные")
+                                            .font(.headline)
+                                            .foregroundStyle(.gray)
+                                        Spacer()
+                                        Text("\(completedExercises.count)")
+                                            .font(.subheadline)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 2)
+                                            .background(Color.gray.opacity(0.2))
+                                            .clipShape(Capsule())
+                                            .foregroundStyle(.gray)
+                                    }
+                                }
+                                .listRowBackground(Color.black)
+                                .tint(.gray)
+                            }
                         }
                         
                         // Отступ снизу для кнопки
@@ -75,7 +143,7 @@ struct WorkoutExecutionView: View {
             // Floating Action Button для режима тренировки
             if !session.exercises.isEmpty {
                 VStack {
-                    RestTimerView(remainingTime: $restTimeRemaining, isActive: $isRestTimerActive)
+                    RestTimerView(remainingTime: $restTimeRemaining, isActive: $isRestTimerActive, endTime: $restEndTime)
                         .padding(.bottom, 8)
                     
                     HStack {
@@ -102,6 +170,18 @@ struct WorkoutExecutionView: View {
         }
         .navigationTitle("Тренировка")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Заменить упражнение", isPresented: $showingRenameAlert) {
+            TextField("Название упражнения", text: $newExerciseName)
+            Button("Отмена", role: .cancel) { }
+            Button("Сохранить") {
+                if let exercise = exerciseToRename {
+                    exercise.name = newExerciseName
+                    updateActivity()
+                }
+            }
+        } message: {
+            Text("Если нужный тренажер занят, вы можете заменить его аналогом.")
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: prepareExport) {
@@ -121,6 +201,75 @@ struct WorkoutExecutionView: View {
         .onAppear {
             // Синхронизируем состояние активности при входе на экран
             currentActivity = Activity<WorkoutAttributes>.activities.first
+            requestNotificationPermission()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                updateRestTimerFromBackground()
+            }
+        }
+    }
+
+    // MARK: - Notification Logic
+    
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
+    }
+    
+    private func scheduleRestNotification(in seconds: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "Время отдыха вышло!"
+        content.body = "Пора делать следующий подход."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
+        let request = UNNotificationRequest(identifier: "WorkoutRestTimer", content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request)
+    }
+    
+    private func cancelRestNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WorkoutRestTimer"])
+    }
+
+    // MARK: - Timer Logic
+
+    private func handleSetCompleted(for exercise: Exercise) {
+        startRestTimer(seconds: 90)
+        if exercise.isCompleted {
+            recentlyCompletedExerciseIDs.insert(exercise.id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    _ = recentlyCompletedExerciseIDs.remove(exercise.id)
+                }
+            }
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                _ = recentlyCompletedExerciseIDs.remove(exercise.id)
+            }
+        }
+    }
+
+    private func startRestTimer(seconds: Int) {        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            restTimeRemaining = seconds
+            restEndTime = Date().addingTimeInterval(TimeInterval(seconds))
+            isRestTimerActive = true
+        }
+        scheduleRestNotification(in: seconds)
+    }
+    
+    private func updateRestTimerFromBackground() {
+        guard isRestTimerActive, let endTime = restEndTime else { return }
+        let now = Date()
+        if now >= endTime {
+            isRestTimerActive = false
+            restTimeRemaining = 0
+        } else {
+            restTimeRemaining = Int(endTime.timeIntervalSince(now))
         }
     }
 
@@ -236,7 +385,7 @@ struct WorkoutExecutionView: View {
             for (index, set) in sortedSets.enumerated() {
                 let weight = set.actualWeight ?? exercise.plannedWeight
                 let reps = set.actualReps ?? set.plannedReps
-                let rpe = set.rpe != nil ? "\(set.rpe!)" : "-"
+                let rpe = "\(set.rpe ?? 8)"
                 let status = set.isCompleted ? "" : "(Не выполнено) "
                 
                 let notes = index == 0 ? exercise.notes.replacingOccurrences(of: "\n", with: " ") : ""
@@ -251,6 +400,7 @@ struct WorkoutExecutionView: View {
 struct RestTimerView: View {
     @Binding var remainingTime: Int
     @Binding var isActive: Bool
+    @Binding var endTime: Date?
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
@@ -275,10 +425,14 @@ struct RestTimerView: View {
             .clipShape(Capsule())
             .overlay(Capsule().stroke(Color.purple.opacity(0.5), lineWidth: 1))
             .onReceive(timer) { _ in
-                if remainingTime > 0 {
-                    remainingTime -= 1
-                } else {
-                    isActive = false
+                if let endTime = endTime {
+                    let now = Date()
+                    if now >= endTime {
+                        isActive = false
+                        remainingTime = 0
+                    } else {
+                        remainingTime = Int(endTime.timeIntervalSince(now))
+                    }
                 }
             }
         }
@@ -331,6 +485,7 @@ struct ExerciseCardView: View {
     @State private var isRecommendationsExpanded: Bool = false
     var onUpdate: () -> Void
     var onSetCompleted: () -> Void
+    var onRename: () -> Void
     
     private var processedRecommendations: AttributedString {
         guard let recs = exercise.recommendations else { return AttributedString("") }
@@ -348,24 +503,22 @@ struct ExerciseCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
-                Button(action: {
-                    UIPasteboard.general.string = exercise.name
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                }) {
-                    HStack(spacing: 6) {
-                        Text("\(exercise.orderIndex ?? 0). \(exercise.name)")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.leading)
-                        
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption2)
-                            .foregroundStyle(.purple.opacity(0.7))
+            HStack(alignment: .top) {
+                Text("\(exercise.orderIndex ?? 0). \(exercise.name)")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture {
+                        UIPasteboard.general.string = exercise.name
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
                     }
-                }
-                .buttonStyle(.plain)
+                    .onLongPressGesture {
+                        let generator = UIImpactFeedbackGenerator(style: .heavy)
+                        generator.impactOccurred()
+                        onRename()
+                    }
                 
                 Spacer()
                 
@@ -470,11 +623,13 @@ struct ExerciseCardView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6).opacity(0.15))
+        .background(exercise.isCompleted ? Color(.systemGray5).opacity(0.1) : Color(.systemGray6).opacity(0.15))
+        .grayscale(exercise.isCompleted ? 1.0 : 0.0)
+        .opacity(exercise.isCompleted ? 0.8 : 1.0)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                .stroke(exercise.isCompleted ? Color.gray.opacity(0.2) : Color.white.opacity(0.05), lineWidth: 1)
         )
     }
 }
@@ -624,7 +779,7 @@ struct SetRowView: View {
                         .font(.system(.subheadline, design: .monospaced)).bold()
                         .frame(width: 40).padding(6)
                         .background(Color.white.opacity(0.05)).cornerRadius(8)
-                        .foregroundStyle(set.rpe != nil ? .purple : .white)
+                        .foregroundStyle(.white)
                 }
             }
             
@@ -677,6 +832,7 @@ struct SetRowView: View {
                 onSetCompleted()
             } else {
                 set.completionTime = nil
+                onSetCompleted() // Trigger re-sort when unchecking
             }
             onUpdate() // Обновляем Live Activity
         }

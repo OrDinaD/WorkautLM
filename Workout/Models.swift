@@ -98,6 +98,10 @@ final class Exercise {
     var isWarmup: Bool = false
     var workout: WorkoutSession?
     
+    var isCompleted: Bool {
+        !sets.isEmpty && sets.allSatisfy { $0.isCompleted }
+    }
+    
     init(name: String = "", orderIndex: Int? = 0, sets: [WorkoutSet] = [], plannedWeight: Double = 0, plannedWeightString: String? = nil, plannedRepsString: String? = nil, notes: String = "", recommendations: String? = "", isWarmup: Bool = false) {
         self.name = name
         self.orderIndex = orderIndex
@@ -130,5 +134,20 @@ final class WorkoutSet {
         self.rpe = rpe
         self.isCompleted = isCompleted
         self.completionTime = completionTime
+    }
+}
+
+@Model
+final class GymPass {
+    var number: String
+    var startDate: Date
+    var endDate: Date
+    var addedDate: Date
+    
+    init(number: String = "", startDate: Date = Date(), endDate: Date = Date(), addedDate: Date = Date()) {
+        self.number = number
+        self.startDate = startDate
+        self.endDate = endDate
+        self.addedDate = addedDate
     }
 }

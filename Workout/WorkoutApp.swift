@@ -21,7 +21,8 @@ struct WorkoutApp: App {
             Supplement.self,
             WorkoutSession.self,
             Exercise.self,
-            WorkoutSet.self
+            WorkoutSet.self,
+            GymPass.self
         ])
     }
 }

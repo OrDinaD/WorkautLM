@@ -116,7 +116,7 @@ struct SmartPlanParserView: View {
                 
                 if parsedWorkout != nil {
                     Section {
-                        ForEach(Array((parsedWorkout?.exercises ?? []).enumerated()), id: \.element) { index, exercise in
+                        ForEach(Array((parsedWorkout?.exercises ?? []).enumerated()), id: \.offset) { index, exercise in
                             exerciseEditRow(index: index)
                                 .listRowBackground(Color.black)
                         }

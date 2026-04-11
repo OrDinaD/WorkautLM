@@ -441,7 +441,7 @@
 		F5BB9E582F62C15600C2A9C4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WorkOut;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Workout/Workout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -451,6 +451,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Workout/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Нам нужен доступ к данным о сне для отслеживания вашего восстановления и готовности к тренировкам.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Мы используем данные о сне для анализа вашего прогресса.";
@@ -480,7 +481,7 @@
 		F5BB9E592F62C15600C2A9C4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WorkOut;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Workout/Workout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -490,6 +491,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Workout/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WorkautLM;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Нам нужен доступ к камере для замера параметров лица и отслеживания прогресса похудения.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Нам нужен доступ к данным о сне для отслеживания вашего восстановления и готовности к тренировкам.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Мы используем данные о сне для анализа вашего прогресса.";
