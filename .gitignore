@@ -1,12 +1,30 @@
-# Xcode
-#
-# gitignore contributors: scroll down to GitHub and 
-# libraries section for commonly used library managers
+# macOS
+.DS_Store
 
-## Build results
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+
+# Xcode / build artifacts
 build/
 DerivedData/
 build_sim/
+Workout/build/
+Workout/build_sim/
+*.xcarchive
+*.xcresult
+*.ipa
+*.app
+*.dSYM
+*.dSYM.zip
+
+# Compiler artifacts
 *.[oa]
 *.o
 *.a
@@ -16,42 +34,27 @@ build_sim/
 *.abi.json
 *.swiftsourceinfo
 
-## Project settings
-xcuserdata/
-*.mode1v3
-*.mode2v3
-*.perspectivev3
-!default.mode1v3
-!default.mode2v3
-!default.perspectivev3
-*.xcuserstate
-
-## Schemes
-## Build history
-*.xcbkptlist
-*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
-
-## Crash logs
-*.crash
-
-## iOS Simulator
-*.session
-*.mobileprovision
-
-## OS X
-.DS_Store
-
-## Swift Package Manager
+# Swift Package Manager
 .build/
 .swiftpm/
 
-## Log files
+# CocoaPods / Carthage (if used)
+Pods/
+Carthage/Build/
+
+# Logs
+*.log
 logs.txt
 sim_logs.txt
-*.log
-
-## App Specific
-Workout/build/
-Workout/build_sim/
 Workout/logs.txt
 Workout/sim_logs.txt
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+*.session
+*.mobileprovision
+*.crash
