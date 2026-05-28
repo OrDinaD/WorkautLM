@@ -127,10 +127,9 @@ struct ContentView: View {
                     .preferredColorScheme(.dark)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
         .tint(.purple)

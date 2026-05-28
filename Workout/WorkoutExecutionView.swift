@@ -32,9 +32,20 @@ struct WorkoutExecutionView: View {
     
     @State private var recentlyCompletedExerciseIDs: Set<PersistentIdentifier> = []
     @Namespace private var animation
+
+    private var isWorkoutModeActive: Bool {
+        currentActivity != nil
+    }
+
+    private var workoutStartBinding: Binding<Date> {
+        Binding(
+            get: { session.startTime ?? session.dailyLog?.date ?? Date() },
+            set: { session.startTime = $0 }
+        )
+    }
     
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             Color.black.ignoresSafeArea()
             
             VStack {
@@ -49,19 +60,15 @@ struct WorkoutExecutionView: View {
                 } else {
                     List {
                         Section {
-                            DatePicker(
-                                "Начало тренировки",
-                                selection: Binding(
-                                    get: { session.startTime ?? session.dailyLog?.date ?? Date() },
-                                    set: { session.startTime = $0 }
-                                ),
-                                displayedComponents: [.hourAndMinute, .date]
-                            )
-                            .foregroundStyle(.white)
+                            HStack(spacing: 12) {
+                                styledDatePicker(systemImage: "calendar", title: "Дата", components: [.date])
+                                styledDatePicker(systemImage: "clock", title: "Время", components: [.hourAndMinute])
+                            }
+                            .frame(maxWidth: .infinity)
                             .tint(.purple)
-                            .listRowBackground(Color.white.opacity(0.05))
-                        } header: {
-                            Text("Время и дата").foregroundStyle(.gray)
+                            .listRowBackground(Color.black)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
+                            .listRowSeparator(.hidden)
                         }
 
                         let allExercises = session.exercises.sorted(by: { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) })
@@ -130,8 +137,6 @@ struct WorkoutExecutionView: View {
                             }
                         }
                         
-                        // Отступ снизу для кнопки
-                        Color.clear.frame(height: 80).listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -139,37 +144,10 @@ struct WorkoutExecutionView: View {
                     .scrollDismissesKeyboard(.interactively)
                 }
             }
-            
-            // Floating Action Button для режима тренировки
-            if !session.exercises.isEmpty {
-                VStack {
-                    RestTimerView(remainingTime: $restTimeRemaining, isActive: $isRestTimerActive, endTime: $restEndTime)
-                        .padding(.bottom, 8)
-                    
-                    HStack {
-                        Spacer()
-                        Button(action: toggleLiveActivity) {
-                            HStack {
-                                Image(systemName: currentActivity == nil ? "play.fill" : "stop.fill")
-                                Text(currentActivity == nil ? "Начать режим тренировки" : "Завершить режим")
-                                    .fontWeight(.bold)
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 15)
-                            .background(currentActivity == nil ? Color.green : Color.red)
-                            .foregroundColor(.white)
-                            .clipShape(Capsule())
-                            .shadow(color: (currentActivity == nil ? Color.green : Color.red).opacity(0.3), radius: 10, x: 0, y: 5)
-                        }
-                    }
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
-                .transition(.scale.combined(with: .opacity))
-            }
         }
         .navigationTitle("Тренировка")
         .navigationBarTitleDisplayMode(.inline)
+        .hiddenNavigationBarBackground()
         .alert("Заменить упражнение", isPresented: $showingRenameAlert) {
             TextField("Название упражнения", text: $newExerciseName)
             Button("Отмена", role: .cancel) { }
@@ -183,19 +161,38 @@ struct WorkoutExecutionView: View {
             Text("Если нужный тренажер занят, вы можете заменить его аналогом.")
         }
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: prepareExport) {
-                    Image(systemName: "square.and.arrow.up")
-                        .foregroundStyle(.purple)
+            if !isWorkoutModeActive {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: prepareExport) {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(.purple)
+                    }
                 }
             }
         }
         .sheet(item: $exportData) { data in
             MarkdownExportView(text: data.text)
         }
+        .safeAreaInset(edge: .top, spacing: 8) {
+            if !session.exercises.isEmpty {
+                RestTimerView(remainingTime: $restTimeRemaining, isActive: $isRestTimerActive, endTime: $restEndTime)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 8) {
+            if !session.exercises.isEmpty {
+                HStack {
+                    workoutModeButton
+                        .frame(maxWidth: isWorkoutModeActive ? 240 : .infinity, alignment: .center)
+                        .frame(minHeight: 50)
+                        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: isWorkoutModeActive)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
+        }
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarBackground(Color.black, for: .navigationBar)
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "ru_RU"))
         .onAppear {
@@ -207,6 +204,33 @@ struct WorkoutExecutionView: View {
             if newPhase == .active {
                 updateRestTimerFromBackground()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var workoutModeButton: some View {
+        let baseButton = Button(action: toggleLiveActivity) {
+            HStack(spacing: isWorkoutModeActive ? 8 : 10) {
+                Image(systemName: isWorkoutModeActive ? "stop.fill" : "play.fill")
+                Text(isWorkoutModeActive ? "Завершить" : "Начать режим тренировки")
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+            }
+            .font(.system(size: 16))
+            .padding(.horizontal, isWorkoutModeActive ? 16 : 24)
+            .padding(.vertical, isWorkoutModeActive ? 10 : 14)
+            .frame(maxWidth: isWorkoutModeActive ? nil : .infinity)
+        }
+
+        if #available(iOS 26.0, *) {
+            baseButton
+                .buttonStyle(.glass(.clear))
+                .foregroundStyle(.purple)
+        } else {
+            baseButton
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
+                .foregroundStyle(.white)
         }
     }
 
@@ -225,7 +249,7 @@ struct WorkoutExecutionView: View {
         content.title = "Время отдыха вышло!"
         content.body = "Пора делать следующий подход."
         content.sound = .default
-        
+
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
         let request = UNNotificationRequest(identifier: "WorkoutRestTimer", content: content, trigger: trigger)
         
@@ -395,6 +419,91 @@ struct WorkoutExecutionView: View {
         
         exportData = ExportData(text: markdown)
     }
+
+    @ViewBuilder
+    private func styledDatePicker(systemImage: String, title: String, components: DatePickerComponents) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.gray)
+
+            DatePicker("", selection: workoutStartBinding, displayedComponents: components)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(.purple)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func hiddenNavigationBarBackground() -> some View {
+        if #available(iOS 16.0, *) {
+            self.toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func restTimerGlassBackground() -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .glassEffect(.regular.tint(.purple.opacity(0.18)), in: Capsule())
+                .overlay(
+                    Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        } else {
+            self
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(
+                    Capsule().stroke(Color.purple.opacity(0.35), lineWidth: 1)
+                )
+        }
+    }
+}
+
+#Preview("Workout Execution") {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(
+        for: DailyLog.self,
+        WorkoutSession.self,
+        Exercise.self,
+        WorkoutSet.self,
+        configurations: config
+    )
+
+    let set1 = WorkoutSet(setNumber: 1, plannedReps: 10)
+    let set2 = WorkoutSet(setNumber: 2, plannedReps: 10, isCompleted: true, completionTime: Date())
+    let set3 = WorkoutSet(setNumber: 3, plannedReps: 8)
+    let exercise = Exercise(
+        name: "Жим лежа",
+        orderIndex: 1,
+        sets: [set1, set2, set3],
+        plannedWeight: 80,
+        notes: "Контроль амплитуды"
+    )
+    let session = WorkoutSession(exercises: [exercise], startTime: Date())
+    let log = DailyLog(date: Date(), sleepDuration: 7.5, notes: "Хорошее самочувствие", workout: session)
+    session.dailyLog = log
+
+    container.mainContext.insert(log)
+    container.mainContext.insert(session)
+
+    return NavigationStack {
+        WorkoutExecutionView(session: session)
+    }
+    .modelContainer(container)
 }
 
 struct RestTimerView: View {
@@ -421,9 +530,7 @@ struct RestTimerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(Color.purple.opacity(0.2))
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(Color.purple.opacity(0.5), lineWidth: 1))
+            .restTimerGlassBackground()
             .onReceive(timer) { _ in
                 if let endTime = endTime {
                     let now = Date()
@@ -443,6 +550,19 @@ struct RestTimerView: View {
         let s = seconds % 60
         return String(format: "%d:%02d", m, s)
     }
+}
+
+#Preview("Rest Timer") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        RestTimerView(
+            remainingTime: .constant(74),
+            isActive: .constant(true),
+            endTime: .constant(Date().addingTimeInterval(74))
+        )
+        .padding(.horizontal, 16)
+    }
+    .preferredColorScheme(.dark)
 }
 
 // MARK: - Subviews

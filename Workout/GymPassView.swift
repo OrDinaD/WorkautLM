@@ -21,6 +21,8 @@ class MotionManager: ObservableObject {
 
 struct GymPassView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query(sort: \GymPass.addedDate, order: .reverse) private var passes: [GymPass]
     
     @StateObject private var motion = MotionManager()
@@ -61,6 +63,8 @@ struct GymPassView: View {
                 Spacer()
             }
             .navigationTitle("Пропуск")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -79,6 +83,10 @@ struct GymPassView: View {
     
     @ViewBuilder
     func passCard(for pass: GymPass) -> some View {
+        let isPortraitLayout = verticalSizeClass == .regular && horizontalSizeClass == .compact
+        let rollAngle = normalizedTilt(from: motion.roll, maxDegrees: isPortraitLayout ? 9 : 12)
+        let pitchAngle = normalizedTilt(from: motion.pitch, maxDegrees: isPortraitLayout ? 5 : 8)
+
         VStack(spacing: 20) {
             // Gym Pass Card
             VStack(spacing: 20) {
@@ -151,8 +159,18 @@ struct GymPassView: View {
                 .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
             )
             .padding(.horizontal)
-            .rotation3DEffect(.degrees(motion.roll * 10), axis: (x: 0, y: 1, z: 0))
-            .rotation3DEffect(.degrees(-motion.pitch * 10), axis: (x: 1, y: 0, z: 0))
+            .rotation3DEffect(
+                .degrees(rollAngle),
+                axis: (x: 0, y: 1, z: 0),
+                anchor: .center,
+                perspective: isPortraitLayout ? 0.55 : 0.45
+            )
+            .rotation3DEffect(
+                .degrees(-pitchAngle),
+                axis: (x: 1, y: 0, z: 0),
+                anchor: .center,
+                perspective: isPortraitLayout ? 0.55 : 0.45
+            )
             
             // Validity Status
             VStack(alignment: .leading, spacing: 8) {
@@ -172,9 +190,7 @@ struct GymPassView: View {
                             .frame(height: 12)
                         
                         Capsule()
-                            .fill(
-                                LinearGradient(gradient: Gradient(colors: [.purple, .blue]), startPoint: .leading, endPoint: .trailing)
-                            )
+                            .fill(Color.purple)
                             .frame(width: geo.size.width * currentProgress(for: pass), height: 12)
                     }
                 }
@@ -186,6 +202,12 @@ struct GymPassView: View {
             }
             .padding(.horizontal, 25)
         }
+    }
+
+    private func normalizedTilt(from radians: Double, maxDegrees: Double) -> Double {
+        let clampedRadians = min(max(radians, -0.8), 0.8)
+        let normalized = clampedRadians / 0.8
+        return normalized * maxDegrees
     }
     
     func generateBarcode(from string: String) -> UIImage? {

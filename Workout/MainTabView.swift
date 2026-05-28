@@ -18,12 +18,7 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Тренировки", systemImage: "dumbbell.fill")
                 }
-            
-            OffDaysView()
-                .tabItem {
-                    Label("Отдых", systemImage: "bed.double.fill")
-                }
-            
+
             GymPassView()
                 .tabItem {
                     Label("Инфо", systemImage: "info.circle.fill")
